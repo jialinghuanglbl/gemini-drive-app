@@ -44,7 +44,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 # OAuth configuration for Streamlit deployment
 OAUTH_CONFIG = {
     "web": {
-        "client_id": st.secrets.get("610906881730-dqmih8757d2r0bt1m9uj4e290tg7s9pc.apps.googleusercontent.com", ""),
+        "client_id": st.secrets.get("GOOGLE_CLIENT_ID", ""),
         "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
@@ -244,6 +244,21 @@ def main():
     st.title("📚 Google Drive AI Chat")
     st.markdown("Chat with your Google Drive documents using AI")
     
+    # Check for OAuth callback in URL
+    query_params = st.query_params
+    if 'code' in query_params and st.session_state.credentials is None:
+        if hasattr(st.session_state, 'flow'):
+            try:
+                credentials = handle_oauth_callback(query_params['code'], st.session_state.flow)
+                if credentials:
+                    st.session_state.credentials = credentials
+                    # Clear the URL parameters
+                    st.query_params.clear()
+                    st.success("Successfully connected to Google Drive!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"OAuth callback error: {e}")
+    
     # Sidebar for configuration
     with st.sidebar:
         st.header("Configuration")
@@ -269,21 +284,14 @@ def main():
             if st.button("🔐 Connect to Google Drive"):
                 flow, auth_url = get_auth_url()
                 if auth_url:
-                    st.markdown(f"[Click here to authorize Google Drive access]({auth_url})")
                     st.session_state.flow = flow
-            
-            # Handle OAuth callback
-            auth_code = st.text_input(
-                "Authorization Code",
-                help="Paste the authorization code from Google here"
-            )
-            
-            if auth_code and hasattr(st.session_state, 'flow'):
-                credentials = handle_oauth_callback(auth_code, st.session_state.flow)
-                if credentials:
-                    st.session_state.credentials = credentials
-                    st.success("✅ Successfully connected to Google Drive!")
-                    st.rerun()
+                    st.markdown(f"""
+                    ### Authorization Steps:
+                    1. Click the link below to authorize access
+                    2. After authorizing, you'll be redirected back automatically
+                    
+                    [🔗 Authorize Google Drive Access]({auth_url})
+                    """)
         else:
             st.success("✅ Connected to Google Drive")
             if st.button("🔓 Disconnect"):
