@@ -37,23 +37,20 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'credentials' not in st.session_state:
     st.session_state.credentials = None
-if 'oauth_flow' not in st.session_state:
-    st.session_state.oauth_flow = None
 
 # Configuration
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-# OAuth configuration
-def get_oauth_config():
-    return {
-        "web": {
-            "client_id": st.secrets.get("GOOGLE_CLIENT_ID", ""),
-            "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [st.secrets.get("REDIRECT_URI", "http://localhost:8501")]
-        }
+# OAuth configuration for Streamlit deployment
+OAUTH_CONFIG = {
+    "web": {
+        "client_id": st.secrets.get("GOOGLE_CLIENT_ID", ""),
+        "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [st.secrets.get("REDIRECT_URI", "http://localhost:8501")]
     }
+}
 
 class SimpleTextRetriever(BaseRetriever):
     """Simple text-based retriever for when embeddings fail"""
@@ -92,56 +89,25 @@ def create_simple_text_store(documents: List[Document]):
 def get_auth_url():
     """Generate Google OAuth authorization URL"""
     try:
-        oauth_config = get_oauth_config()
-        
-        # Create flow with state parameter
         flow = Flow.from_client_config(
-            oauth_config,
+            OAUTH_CONFIG,
             scopes=SCOPES,
-            redirect_uri=oauth_config["web"]["redirect_uris"][0]
+            redirect_uri=OAUTH_CONFIG["web"]["redirect_uris"][0]
         )
         
-        # Generate URL with state for security
-        auth_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'
-        )
-        
-        # Store the state in session
-        st.session_state.oauth_state = state
-        
-        # Store flow configuration (not the object itself)
-        st.session_state.flow_config = {
-            'client_config': oauth_config,
-            'redirect_uri': oauth_config["web"]["redirect_uris"][0]
-        }
-        
-        return auth_url
+        auth_url, _ = flow.authorization_url(prompt='consent')
+        return flow, auth_url
     except Exception as e:
         st.error(f"Error setting up OAuth: {e}")
-        return None
+        return None, None
 
-def complete_oauth_flow(auth_code: str):
-    """Complete OAuth flow with authorization code"""
+def handle_oauth_callback(authorization_code: str, flow):
+    """Handle OAuth callback and get credentials"""
     try:
-        if 'flow_config' not in st.session_state:
-            st.error("OAuth flow not initialized. Please try connecting again.")
-            return None
-        
-        # Recreate the flow from stored config
-        flow = Flow.from_client_config(
-            st.session_state.flow_config['client_config'],
-            scopes=SCOPES,
-            redirect_uri=st.session_state.flow_config['redirect_uri']
-        )
-        
-        # Fetch token with the code
-        flow.fetch_token(code=auth_code)
-        
+        flow.fetch_token(code=authorization_code)
         return flow.credentials
     except Exception as e:
-        st.error(f"Error completing OAuth: {e}")
+        st.error(f"Error getting credentials: {e}")
         return None
 
 def list_drive_files(service, folder_id: Optional[str] = None, search_term: Optional[str] = None):
@@ -278,21 +244,20 @@ def main():
     st.title("📚 Google Drive AI Chat")
     st.markdown("Chat with your Google Drive documents using AI")
     
-    # Check for OAuth callback in URL parameters
+    # Check for OAuth callback in URL
     query_params = st.query_params
-    
-    # Handle OAuth callback
     if 'code' in query_params and st.session_state.credentials is None:
-        with st.spinner("Completing authentication..."):
-            credentials = complete_oauth_flow(query_params['code'])
-            if credentials:
-                st.session_state.credentials = credentials
-                # Clear query parameters
-                st.query_params.clear()
-                st.success("Successfully connected to Google Drive!")
-                st.rerun()
-            else:
-                st.error("Authentication failed. Please try again.")
+        if hasattr(st.session_state, 'flow'):
+            try:
+                credentials = handle_oauth_callback(query_params['code'], st.session_state.flow)
+                if credentials:
+                    st.session_state.credentials = credentials
+                    # Clear the URL parameters
+                    st.query_params.clear()
+                    st.success("Successfully connected to Google Drive!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"OAuth callback error: {e}")
     
     # Sidebar for configuration
     with st.sidebar:
@@ -302,49 +267,38 @@ def main():
         gemini_api_key = st.text_input(
             "Gemini API Key",
             type="password",
-            help="Enter your Google Gemini API key",
-            value=st.session_state.get('gemini_api_key', '')
+            help="Enter your Google Gemini API key"
         )
-        
-        if gemini_api_key:
-            st.session_state.gemini_api_key = gemini_api_key
-            genai.configure(api_key=gemini_api_key)
         
         if not gemini_api_key:
             st.warning("Please enter your Gemini API key to continue")
             st.stop()
         
+        # Configure Gemini
+        genai.configure(api_key=gemini_api_key)
+        
         st.header("Google Drive Authentication")
         
         # OAuth flow
         if st.session_state.credentials is None:
-            st.info("You need to authorize access to your Google Drive")
-            
-            if st.button("🔐 Connect to Google Drive", use_container_width=True):
-                auth_url = get_auth_url()
+            if st.button("🔐 Connect to Google Drive"):
+                flow, auth_url = get_auth_url()
                 if auth_url:
-                    st.markdown("""
-                    ### Next Steps:
-                    1. Click the link below
-                    2. Sign in to your Google account
-                    3. Grant access to your Google Drive
-                    4. You'll be redirected back automatically
+                    st.session_state.flow = flow
+                    st.markdown(f"""
+                    ### Authorization Steps:
+                    1. Click the link below to authorize access
+                    2. After authorizing, you'll be redirected back automatically
+                    
+                    [🔗 Authorize Google Drive Access]({auth_url})
                     """)
-                    st.markdown(f"### [🔗 Click Here to Authorize]({auth_url})")
-                    st.info("After authorizing, you'll be redirected back to this page automatically.")
         else:
             st.success("✅ Connected to Google Drive")
-            
-            # Show connected account info if available
-            if hasattr(st.session_state.credentials, 'id_token_jwt'):
-                st.caption("Google Drive access granted")
-            
-            if st.button("🔓 Disconnect", use_container_width=True):
+            if st.button("🔓 Disconnect"):
                 st.session_state.credentials = None
                 st.session_state.documents = []
                 st.session_state.vector_store = None
                 st.session_state.retrieval_chain = None
-                st.session_state.flow_config = None
                 st.rerun()
     
     # Main content
