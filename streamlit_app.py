@@ -44,7 +44,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 # OAuth configuration for Streamlit deployment
 OAUTH_CONFIG = {
     "web": {
-        "client_id": st.secrets.get("GOOGLE_CLIENT_ID", ""),
+        "client_id": st.secrets.get("610906881730-dqmih8757d2r0bt1m9uj4e290tg7s9pc.apps.googleusercontent.com", ""),
         "client_secret": st.secrets.get("GOOGLE_CLIENT_SECRET", ""),
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
