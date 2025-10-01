@@ -329,6 +329,23 @@ def main():
     if st.session_state.vector_store and st.session_state.get('gemini_configured'):
         st.header("💬 Chat with Your Documents")
         
+        # Debug: Show available models
+        with st.expander("🔍 Debug: Check Available Models"):
+            try:
+                available_models = []
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        available_models.append(m.name)
+                
+                st.write("Available models for generateContent:")
+                for model_name in available_models:
+                    st.code(model_name)
+                
+                if available_models:
+                    st.info(f"Try using one of these model names: {available_models[0]}")
+            except Exception as e:
+                st.error(f"Could not list models: {e}")
+        
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
                 st.write(question)
@@ -356,35 +373,49 @@ def main():
                     # Create context from documents
                     context = "\n\n".join([doc.page_content[:1000] for doc in relevant_docs[:3]])
                     
-                    # Use native Gemini API directly
+                    # Use native Gemini API directly - try multiple model names
                     with st.spinner("Thinking..."):
-                        model = genai.GenerativeModel('gemini-pro')
-                        prompt = f"""Based on the following document content, please answer this question: {user_question}
+                        model_names = ['gemini-pro', 'models/gemini-pro', 'gemini-1.0-pro']
+                        
+                        answer = None
+                        last_error = None
+                        
+                        for model_name in model_names:
+                            try:
+                                model = genai.GenerativeModel(model_name)
+                                prompt = f"""Based on the following document content, please answer this question: {user_question}
 
 Document content:
 {context}
 
 Please provide a helpful and accurate answer based only on the information provided."""
+                                
+                                response = model.generate_content(prompt)
+                                answer = response.text
+                                break  # Success, exit loop
+                            except Exception as model_error:
+                                last_error = model_error
+                                continue
                         
-                        response = model.generate_content(prompt)
-                        answer = response.text
-                        
-                        st.write(answer)
-                        
-                        # Show sources
-                        with st.expander("📚 Sources"):
-                            for doc in relevant_docs[:3]:
-                                st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
-                                st.text(doc.page_content[:200] + "...")
-                        
-                        st.session_state.chat_history.append((user_question, answer))
+                        if answer:
+                            st.write(answer)
+                            
+                            # Show sources
+                            with st.expander("📚 Sources"):
+                                for doc in relevant_docs[:3]:
+                                    st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
+                                    st.text(doc.page_content[:200] + "...")
+                            
+                            st.session_state.chat_history.append((user_question, answer))
+                        else:
+                            raise last_error if last_error else Exception("All model attempts failed")
                 
                 except Exception as e:
                     st.error(f"⚠️ Error: {str(e)[:200]}")
                     
                     # Fallback to showing document snippets
+                    st.info("📝 Showing relevant document content instead:")
                     try:
-                        st.info("📝 Showing relevant document content instead:")
                         if hasattr(st.session_state.vector_store, 'as_retriever'):
                             retriever = st.session_state.vector_store.as_retriever()
                             if hasattr(retriever, '_get_relevant_documents'):
