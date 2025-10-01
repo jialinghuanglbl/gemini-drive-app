@@ -370,8 +370,8 @@ def main():
                     else:
                         relevant_docs = st.session_state.documents
                     
-                    # Create context from documents
-                    context = "\n\n".join([doc.page_content[:1000] for doc in relevant_docs[:3]])
+                    # Create context from documents - use full content
+                    context = "\n\n".join([doc.page_content for doc in relevant_docs[:3]])
                     
                     # Use native Gemini API directly - try multiple model names
                     with st.spinner("Thinking..."):
