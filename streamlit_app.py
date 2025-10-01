@@ -300,17 +300,8 @@ def main():
                     st.session_state.vector_store = create_vector_store(documents, gemini_api_key)
                     
                     if st.session_state.vector_store:
-                        model = ChatGoogleGenerativeAI(
-                            model="gemini-pro",
-                            temperature=0.7,
-                            google_api_key=gemini_api_key
-                        )
-                        
-                        st.session_state.retrieval_chain = ConversationalRetrievalChain.from_llm(
-                            llm=model,
-                            retriever=st.session_state.vector_store.as_retriever(),
-                            return_source_documents=True
-                        )
+                        # Store the API key for later use instead of creating model now
+                        st.session_state.gemini_configured = True
                     
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
                 else:
@@ -335,7 +326,7 @@ def main():
                 )
     
     # Chat interface
-    if st.session_state.retrieval_chain:
+    if st.session_state.vector_store and st.session_state.get('gemini_configured'):
         st.header("💬 Chat with Your Documents")
         
         for question, answer in st.session_state.chat_history:
@@ -352,51 +343,78 @@ def main():
             
             with st.chat_message("assistant"):
                 try:
+                    # Get relevant documents
+                    if hasattr(st.session_state.vector_store, 'as_retriever'):
+                        retriever = st.session_state.vector_store.as_retriever()
+                        if hasattr(retriever, '_get_relevant_documents'):
+                            relevant_docs = retriever._get_relevant_documents(user_question)
+                        else:
+                            relevant_docs = retriever.get_relevant_documents(user_question)
+                    else:
+                        relevant_docs = st.session_state.documents
+                    
+                    # Create context from documents
+                    context = "\n\n".join([doc.page_content[:1000] for doc in relevant_docs[:3]])
+                    
+                    # Use native Gemini API directly
                     with st.spinner("Thinking..."):
-                        result = st.session_state.retrieval_chain({
-                            "question": user_question,
-                            "chat_history": st.session_state.chat_history
-                        })
-                        answer = result['answer']
+                        model = genai.GenerativeModel('gemini-pro')
+                        prompt = f"""Based on the following document content, please answer this question: {user_question}
+
+Document content:
+{context}
+
+Please provide a helpful and accurate answer based only on the information provided."""
+                        
+                        response = model.generate_content(prompt)
+                        answer = response.text
+                        
                         st.write(answer)
                         
-                        if 'source_documents' in result and result['source_documents']:
-                            with st.expander("📚 Sources"):
-                                for doc in result['source_documents']:
-                                    st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
-                                    st.text(doc.page_content[:200] + "...")
+                        # Show sources
+                        with st.expander("📚 Sources"):
+                            for doc in relevant_docs[:3]:
+                                st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
+                                st.text(doc.page_content[:200] + "...")
                         
                         st.session_state.chat_history.append((user_question, answer))
                 
                 except Exception as e:
                     st.error(f"⚠️ Error: {str(e)[:200]}")
                     
+                    # Fallback to showing document snippets
                     try:
-                        st.info("📝 Showing relevant document content:")
-                        if hasattr(st.session_state.retrieval_chain.retriever, '_documents'):
-                            relevant_docs = st.session_state.retrieval_chain.retriever._get_relevant_documents(user_question)
+                        st.info("📝 Showing relevant document content instead:")
+                        if hasattr(st.session_state.vector_store, 'as_retriever'):
+                            retriever = st.session_state.vector_store.as_retriever()
+                            if hasattr(retriever, '_get_relevant_documents'):
+                                relevant_docs = retriever._get_relevant_documents(user_question)
+                            else:
+                                relevant_docs = st.session_state.documents
+                        else:
+                            relevant_docs = st.session_state.documents
+                        
+                        for doc in relevant_docs[:2]:
+                            st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
                             
-                            for doc in relevant_docs[:2]:
-                                st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
-                                
-                                content = doc.page_content.lower()
-                                query_words = user_question.lower().split()
-                                
-                                best_snippet = ""
-                                for word in query_words:
-                                    if word in content:
-                                        word_pos = content.find(word)
-                                        start = max(0, word_pos - 200)
-                                        end = min(len(content), word_pos + 200)
-                                        snippet = doc.page_content[start:end]
-                                        if len(snippet) > len(best_snippet):
-                                            best_snippet = snippet
-                                
-                                if best_snippet:
-                                    st.text_area("Relevant content", best_snippet, height=100)
-                                else:
-                                    preview = doc.page_content[:300]
-                                    st.text_area("Document preview", preview, height=100)
+                            content = doc.page_content.lower()
+                            query_words = user_question.lower().split()
+                            
+                            best_snippet = ""
+                            for word in query_words:
+                                if word in content:
+                                    word_pos = content.find(word)
+                                    start = max(0, word_pos - 200)
+                                    end = min(len(content), word_pos + 200)
+                                    snippet = doc.page_content[start:end]
+                                    if len(snippet) > len(best_snippet):
+                                        best_snippet = snippet
+                            
+                            if best_snippet:
+                                st.text_area("Relevant content", best_snippet, height=100, key=f"snippet_{doc.metadata.get('file_id', 'unknown')}")
+                            else:
+                                preview = doc.page_content[:300]
+                                st.text_area("Document preview", preview, height=100, key=f"preview_{doc.metadata.get('file_id', 'unknown')}")
                     except Exception as fallback_error:
                         st.error(f"Fallback also failed: {fallback_error}")
 
