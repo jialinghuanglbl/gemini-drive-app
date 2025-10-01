@@ -13,13 +13,28 @@ A Streamlit application that allows you to chat with your Google Drive documents
 
 ## Setup for Deployment
 
-### 1. Google Cloud Setup
+### 1. Google Cloud Setup (Service Account)
 
+**Create a Service Account:**
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select an existing one
-3. Enable the Google Drive API and Generative AI API
-4. Create OAuth2 credentials (Web application type)
-5. Add your Streamlit app URL to authorized redirect URIs
+2. Create a new project or select existing one
+3. Navigate to "IAM & Admin" → "Service Accounts"
+4. Click "Create Service Account"
+5. Give it a name (e.g., "drive-chat-bot")
+6. Grant it "Viewer" role (or no role needed)
+7. Click "Create Key" → JSON format
+8. Download the JSON file
+
+**Enable APIs:**
+1. Go to "APIs & Services" → "Library"
+2. Enable "Google Drive API"
+3. Enable "Generative Language API"
+
+**Share Google Drive Files:**
+1. Open the downloaded JSON file
+2. Copy the `client_email` value (looks like `xxx@xxx.iam.gserviceaccount.com`)
+3. In Google Drive, share your folders/files with this email address
+4. Give it "Viewer" or "Commenter" permission
 
 ### 2. Google AI Studio Setup
 
@@ -32,12 +47,21 @@ A Streamlit application that allows you to chat with your Google Drive documents
 1. Fork this repository to your GitHub account
 2. Go to [Streamlit Cloud](https://streamlit.io/cloud)
 3. Connect your GitHub account and deploy this repository
-4. Add the following secrets in Streamlit Cloud settings:
+4. Add secrets in Streamlit Cloud settings:
 
 ```toml
-GOOGLE_CLIENT_ID = "your-google-oauth-client-id"
-GOOGLE_CLIENT_SECRET = "your-google-oauth-client-secret"
-REDIRECT_URI = "https://your-app-name.streamlit.app"
+# Add the entire contents of your service account JSON file
+[gcp_service_account]
+type = "service_account"
+project_id = "your-project-id"
+private_key_id = "your-private-key-id"
+private_key = "-----BEGIN PRIVATE KEY-----\nYour-private-key-here\n-----END PRIVATE KEY-----\n"
+client_email = "your-service-account@your-project.iam.gserviceaccount.com"
+client_id = "your-client-id"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "your-cert-url"
 ```
 
 ### 4. Local Development
