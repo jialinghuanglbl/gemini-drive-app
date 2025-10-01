@@ -7,11 +7,8 @@ import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain.schema import Document, BaseRetriever
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain.chains import ConversationalRetrievalChain
 
 # Page configuration
 st.set_page_config(
@@ -181,7 +178,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
         return None
 
 def create_vector_store(documents: List[Document], gemini_api_key: str):
-    """Create vector store with fallback to simple text search"""
+    """Create simple text store (no embeddings to avoid quota issues)"""
     if not documents:
         return None
     
@@ -191,18 +188,9 @@ def create_vector_store(documents: List[Document], gemini_api_key: str):
     )
     chunks = text_splitter.split_documents(documents)
     
-    try:
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=gemini_api_key
-        )
-        vector_store = FAISS.from_documents(chunks, embeddings)
-        st.success(f"✅ Created vector store with embeddings for {len(chunks)} chunks")
-        return vector_store
-    except Exception as e:
-        st.warning(f"⚠️ Embeddings failed: {str(e)[:100]}...")
-        st.info("📝 Using simple text search instead")
-        return create_simple_text_store(documents)
+    # Skip embeddings entirely, go straight to simple text search
+    st.info(f"Using simple text search for {len(documents)} documents")
+    return create_simple_text_store(documents)
 
 def main():
     st.title("📚 Google Drive AI Chat")
