@@ -301,7 +301,7 @@ def main():
                     
                     if st.session_state.vector_store:
                         model = ChatGoogleGenerativeAI(
-                            model="gemini-1.5-flash",
+                            model="gemini-pro",
                             temperature=0.7,
                             google_api_key=gemini_api_key
                         )
