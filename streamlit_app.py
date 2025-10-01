@@ -375,7 +375,12 @@ def main():
                     
                     # Use native Gemini API directly - try multiple model names
                     with st.spinner("Thinking..."):
-                        model_names = ['gemini-pro', 'models/gemini-pro', 'gemini-1.0-pro']
+                        # Use the models that actually exist for your API key
+                        model_names = [
+                            'models/gemini-2.0-flash',
+                            'models/gemini-2.5-flash', 
+                            'models/gemini-flash-latest'
+                        ]
                         
                         answer = None
                         last_error = None
