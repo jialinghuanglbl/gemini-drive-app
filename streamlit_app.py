@@ -358,31 +358,38 @@ def main():
     # Add custom CSS for sticky header
     st.markdown("""
         <style>
-        /* Make the header sticky */
-        [data-testid="stHeader"] {
-            position: sticky;
+        /* Make header area sticky */
+        .sticky-header {
+            position: fixed;
             top: 0;
-            background-color: white;
+            left: 0;
+            right: 0;
+            background-color: var(--background-color);
             z-index: 999;
+            padding: 1rem 1rem 0.5rem 1rem;
+            border-bottom: 1px solid rgba(49, 51, 63, 0.2);
         }
         
-        /* For dark mode */
-        [data-testid="stHeader"][data-theme="dark"] {
-            background-color: #0e1117;
+        /* Add padding to main content so it's not hidden under sticky header */
+        .main-content {
+            margin-top: 120px;
         }
         
-        /* Style the title to be part of sticky area */
-        .main > div:first-child {
-            position: sticky;
-            top: 3.5rem;
-            background: inherit;
-            z-index: 998;
-            padding-top: 1rem;
-            padding-bottom: 1rem;
+        /* Adjust for sidebar */
+        section[data-testid="stSidebar"] ~ div {
+            padding-left: calc(21rem + 1rem);
         }
         </style>
     """, unsafe_allow_html=True)
     
+    # Create sticky header using HTML
+    st.markdown("""
+        <div class="sticky-header">
+            <h1>📚 Google Drive AI Chat</h1>
+            <p style="color: gray; margin-top: -10px;">Chat with your Google Drive documents using AI</p>
+        </div>
+        <div class="main-content"></div>
+    """, unsafe_allow_html=True)
     st.title("📚 Google Drive AI Chat")
     st.markdown("Chat with your Google Drive documents using AI")
     
