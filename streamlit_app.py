@@ -536,23 +536,6 @@ def main():
     if st.session_state.vector_store and st.session_state.get('gemini_configured'):
         st.header("💬 Chat with Your Documents")
         
-        # Debug: Show available models
-        with st.expander("🔍 Debug: Check Available Models"):
-            try:
-                available_models = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                
-                st.write("Available models for generateContent:")
-                for model_name in available_models:
-                    st.code(model_name)
-                
-                if available_models:
-                    st.info(f"Try using one of these model names: {available_models[0]}")
-            except Exception as e:
-                st.error(f"Could not list models: {e}")
-        
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
                 st.write(question)
