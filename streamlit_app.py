@@ -661,10 +661,14 @@ Please provide a helpful and accurate answer based only on the information provi
                                     with col1:
                                         st.caption(f"📄 Full document: {len(content):,} characters")
                                     with col2:
-                                        if st.button(f"View full doc", key=f"view_full_{idx}_{doc.metadata.get('file_id', 'unknown')}", use_container_width=True):
-                                            st.session_state[f'show_full_{idx}'] = not st.session_state.get(f'show_full_{idx}', False)
+                                        # Use a checkbox instead of button for persistent state
+                                        show_full = st.checkbox(
+                                            "Show full doc", 
+                                            key=f"show_full_{idx}_{doc.metadata.get('file_id', 'unknown')}",
+                                            value=False
+                                        )
                                     
-                                    if st.session_state.get(f'show_full_{idx}', False):
+                                    if show_full:
                                         st.text_area(
                                             "Full document content",
                                             value=content,
@@ -672,6 +676,10 @@ Please provide a helpful and accurate answer based only on the information provi
                                             disabled=True,
                                             key=f"full_content_{idx}_{doc.metadata.get('file_id', 'unknown')}"
                                         )
+                                    
+                                    # Add a divider between sources
+                                    if idx < len(relevant_docs[:3]):
+                                        st.divider()
                             
                             st.session_state.chat_history.append((user_question, answer))
                         else:
