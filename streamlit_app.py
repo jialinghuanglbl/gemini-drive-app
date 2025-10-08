@@ -200,6 +200,126 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     
     return results if results else [(content[:excerpt_length] + "...", 0)]
 
+def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
+    """
+    Find the most relevant excerpts from content based on query and answer.
+    Returns list of (excerpt, relevance_score) tuples.
+    """
+    content_lower = content.lower()
+    query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]
+    
+    # Also extract key terms from the answer if provided
+    answer_words = []
+    if answer:
+        answer_words = [w.strip('?.,!;:') for w in answer.lower().split() if len(w) > 4]
+        # Filter out common words
+        common_words = {'this', 'that', 'these', 'those', 'there', 'where', 'when', 'what', 
+                       'which', 'while', 'with', 'about', 'would', 'could', 'should', 'their',
+                       'document', 'section', 'states', 'mentions', 'based', 'provided'}
+        answer_words = [w for w in answer_words if w not in common_words][:10]  # Top 10 answer keywords
+    
+    all_search_words = query_words + answer_words
+    
+    if not all_search_words:
+        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
+    
+    # Split content into chunks with overlap
+    chunk_size = excerpt_length
+    chunks = []
+    for i in range(0, len(content), chunk_size // 3):  # 66% overlap for better coverage
+        chunk_text = content[i:i + chunk_size]
+        if chunk_text.strip():
+            chunks.append((chunk_text, i))
+    
+    # Score each chunk
+    scored_chunks = []
+    for chunk_text, start_pos in chunks:
+        chunk_lower = chunk_text.lower()
+        score = 0
+        
+        # Higher weight for query words (what the user asked)
+        for word in query_words:
+            count = chunk_lower.count(word)
+            score += count * 3
+        
+        # Medium weight for answer keywords (what the AI said)
+        for word in answer_words:
+            count = chunk_lower.count(word)
+            score += count * 2
+        
+        # Bonus for having both query AND answer terms
+        has_query_term = any(word in chunk_lower for word in query_words)
+        has_answer_term = any(word in chunk_lower for word in answer_words)
+        if has_query_term and has_answer_term:
+            score += 10
+        
+        # Count unique words found
+        unique_query_words = sum(1 for word in query_words if word in chunk_lower)
+        unique_answer_words = sum(1 for word in answer_words if word in chunk_lower)
+        score += unique_query_words * 4
+        score += unique_answer_words * 2
+        
+        # Bonus for word density (multiple relevant words in small area)
+        positions = []
+        for word in all_search_words:
+            pos = 0
+            while pos < len(chunk_lower):
+                pos = chunk_lower.find(word, pos)
+                if pos == -1:
+                    break
+                positions.append(pos)
+                pos += 1
+        
+        if len(positions) > 2:
+            # Calculate how clustered the words are
+            positions.sort()
+            gaps = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+            avg_gap = sum(gaps) / len(gaps) if gaps else chunk_size
+            if avg_gap < chunk_size / 3:  # Words are clustered
+                score += 8
+        
+        # Boost for exact phrase matches
+        query_phrases = []
+        if len(query.split()) >= 2:
+            words = query.lower().split()
+            for i in range(len(words) - 1):
+                phrase = ' '.join(words[i:i+2])
+                if phrase in chunk_lower:
+                    score += 15
+        
+        if score > 0:
+            scored_chunks.append((chunk_text, start_pos, score))
+    
+    # Sort by score
+    scored_chunks.sort(key=lambda x: x[2], reverse=True)
+    
+    if not scored_chunks:
+        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
+    
+    # Format results
+    results = []
+    seen_positions = set()
+    
+    for chunk_text, start_pos, score in scored_chunks[:num_excerpts * 2]:  # Get more candidates
+        # Avoid duplicate/overlapping excerpts
+        if any(abs(start_pos - seen) < chunk_size // 2 for seen in seen_positions):
+            continue
+        
+        seen_positions.add(start_pos)
+        
+        formatted = chunk_text.strip()
+        if start_pos > 0:
+            formatted = "..." + formatted
+        if start_pos + len(chunk_text) < len(content):
+            formatted = formatted + "..."
+        
+        results.append((formatted, score))
+        
+        if len(results) >= num_excerpts:
+            break
+    
+    return results if results else [(content[:excerpt_length] + "...", 0)]
+
 def extract_drive_id_from_url(url: str) -> tuple[Optional[str], str]:
     """
     Extract Google Drive file/folder ID from URL
