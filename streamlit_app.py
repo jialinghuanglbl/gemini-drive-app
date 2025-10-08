@@ -434,7 +434,7 @@ def main():
             folder_search = None
             
     elif load_option == "📄 Search files":
-        search_term = st.text_input("🔍 Search for files", placeholder="Enter keywords to find files...")
+        search_term = st.text_input("📄 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
         
