@@ -657,22 +657,14 @@ Please provide a helpful and accurate answer based only on the information provi
                                             label_visibility="collapsed"
                                         )
                                     
-                                    col1, col2 = st.columns([3, 1])
-                                    with col1:
-                                        st.caption(f"📄 Full document: {len(content):,} characters")
-                                    with col2:
-                                        # Use a checkbox instead of button for persistent state
-                                        show_full = st.checkbox(
-                                            "Show full doc", 
-                                            key=f"show_full_{idx}_{doc.metadata.get('file_id', 'unknown')}",
-                                            value=False
-                                        )
+                                    st.caption(f"📄 Full document: {len(content):,} characters")
                                     
-                                    if show_full:
+                                    # Use expander for full document instead
+                                    with st.expander(f"📖 View full document"):
                                         st.text_area(
                                             "Full document content",
                                             value=content,
-                                            height=300,
+                                            height=400,
                                             disabled=True,
                                             key=f"full_content_{idx}_{doc.metadata.get('file_id', 'unknown')}"
                                         )
