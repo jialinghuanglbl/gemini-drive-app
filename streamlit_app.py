@@ -433,12 +433,12 @@ def main():
             search_term = None
             folder_search = None
             
-    elif load_option == "Search files":
+    elif load_option == "📄 Search files":
         search_term = st.text_input("🔍 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
         
-    elif load_option == "Browse by folder":
+    elif load_option == "📁 Browse by folder":
         folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
         folder_search = None
