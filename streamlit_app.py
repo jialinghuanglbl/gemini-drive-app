@@ -299,7 +299,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
                 }
             )
     except Exception as e:
-        st.warning(f"Error processing {file_name}: {e}")
+        # Prevent crashing on single file errors
         return None
 
 def create_vector_store(documents: List[Document], gemini_api_key: str):
