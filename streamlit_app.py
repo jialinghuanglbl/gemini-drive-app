@@ -395,13 +395,40 @@ def main():
     st.header("📂 Load Documents")
     
     # Option selector
-    load_option = st.radio(
-        "Choose loading method:",
-        ["Paste URL", "Search files", "Browse by folder", "Search folders"],
-        horizontal=True
-    )
+    from streamlit import session_state as state
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.markdown("### Choose a loading method:")
+
+# Initialize the selected option
+if "load_option" not in state:
+    state.load_option = "Paste URL"
+
+# Create styled buttons
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    if st.button("🔗 Paste URL", use_container_width=True):
+        state.load_option = "Paste URL"
+
+with col2:
+    if st.button("🔍 Search Files", use_container_width=True):
+        state.load_option = "Search files"
+
+with col3:
+    if st.button("📁 Browse by Folder", use_container_width=True):
+        state.load_option = "Browse by folder"
+
+with col4:
+    if st.button("📂 Search Folders", use_container_width=True):
+        state.load_option = "Search folders"
+
+# Add a subtle indicator below buttons
+st.markdown(f"<div style='text-align:center;margin-top:10px;'><b>Current selection:</b> <code>{state.load_option}</code></div>", unsafe_allow_html=True)
+
     
-    if load_option == "Paste URL":
+    if state.load_option == "Paste URL":
         drive_url = st.text_input(
             "🔗 Google Drive URL", 
             placeholder="Paste link to file or folder (e.g., https://drive.google.com/drive/folders/...)",
