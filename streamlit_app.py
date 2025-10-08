@@ -493,6 +493,14 @@ def main():
                 st.info(f"Found {len(files)} files. Processing...")
                 
                 documents = []
+                # Inject custom CSS to make the progress bar bigger
+                st.markdown("""
+                    <style>
+                    div[data-testid="stProgressBar"] > div > div > div {
+                        height: 32px !important;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
                 progress_bar = st.progress(0)
                 
                 for i, file_info in enumerate(files):
