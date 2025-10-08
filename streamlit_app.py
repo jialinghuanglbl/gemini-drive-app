@@ -80,6 +80,76 @@ def get_drive_service():
         st.error(f"Error creating Drive service: {e}")
         return None
 
+def find_relevant_excerpts(content: str, query: str, num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
+    """
+    Find the most relevant excerpts from content based on query.
+    Returns list of (excerpt, relevance_score) tuples.
+    """
+    content_lower = content.lower()
+    query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]  # Filter out short words
+    
+    if not query_words:
+        # Fallback: return beginning of document
+        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
+    
+    # Split content into chunks
+    chunk_size = excerpt_length
+    chunks = []
+    for i in range(0, len(content), chunk_size // 2):  # 50% overlap
+        chunk_text = content[i:i + chunk_size]
+        if chunk_text.strip():
+            chunks.append((chunk_text, i))
+    
+    # Score each chunk based on query word presence
+    scored_chunks = []
+    for chunk_text, start_pos in chunks:
+        chunk_lower = chunk_text.lower()
+        score = 0
+        
+        # Count exact word matches
+        for word in query_words:
+            score += chunk_lower.count(word) * 2
+        
+        # Bonus for multiple different query words in same chunk
+        unique_words_found = sum(1 for word in query_words if word in chunk_lower)
+        score += unique_words_found * 3
+        
+        # Bonus for words appearing close together
+        positions = []
+        for word in query_words:
+            pos = chunk_lower.find(word)
+            if pos != -1:
+                positions.append(pos)
+        
+        if len(positions) > 1:
+            # Calculate proximity bonus (closer words = higher score)
+            max_distance = max(positions) - min(positions)
+            if max_distance < chunk_size / 2:
+                score += 5
+        
+        if score > 0:
+            scored_chunks.append((chunk_text, start_pos, score))
+    
+    # Sort by score and return top excerpts
+    scored_chunks.sort(key=lambda x: x[2], reverse=True)
+    
+    if not scored_chunks:
+        # No matches found, return beginning
+        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
+    
+    # Return top excerpts with formatting
+    results = []
+    for chunk_text, start_pos, score in scored_chunks[:num_excerpts]:
+        # Add ellipsis if not at start/end
+        formatted = chunk_text
+        if start_pos > 0:
+            formatted = "..." + formatted
+        if start_pos + len(chunk_text) < len(content):
+            formatted = formatted + "..."
+        results.append((formatted.strip(), score))
+    
+    return results
+
 def extract_drive_id_from_url(url: str) -> tuple[Optional[str], str]:
     """
     Extract Google Drive file/folder ID from URL
@@ -543,40 +613,40 @@ Please provide a helpful and accurate answer based only on the information provi
                         if answer:
                             st.write(answer)
                             
-                            # Show sources with better context
+                            # Show sources with intelligent excerpt extraction
                             with st.expander("📚 Sources"):
                                 for idx, doc in enumerate(relevant_docs[:3], 1):
                                     st.subheader(f"Source {idx}: {doc.metadata.get('source', 'Unknown')}")
                                     
-                                    # Show relevant excerpt around the answer
                                     content = doc.page_content
                                     
-                                    # Try to find the most relevant part based on the question
-                                    query_words = user_question.lower().split()
-                                    best_excerpt_start = 0
+                                    # Find multiple relevant excerpts
+                                    excerpts = find_relevant_excerpts(content, user_question, num_excerpts=2, excerpt_length=500)
                                     
-                                    for word in query_words[:3]:  # Check first 3 words of question
-                                        if word in content.lower():
-                                            word_pos = content.lower().find(word)
-                                            best_excerpt_start = max(0, word_pos - 300)
-                                            break
+                                    for excerpt_idx, (excerpt, relevance_score) in enumerate(excerpts, 1):
+                                        if len(excerpts) > 1:
+                                            st.markdown(f"**Relevant section {excerpt_idx}** (relevance: {relevance_score})")
+                                        
+                                        st.text_area(
+                                            f"Excerpt {excerpt_idx}",
+                                            value=excerpt,
+                                            height=120,
+                                            disabled=True,
+                                            key=f"source_{idx}_excerpt_{excerpt_idx}_{doc.metadata.get('file_id', 'unknown')}",
+                                            label_visibility="collapsed"
+                                        )
                                     
-                                    # Show a meaningful excerpt (600 chars = ~100 words)
-                                    excerpt = content[best_excerpt_start:best_excerpt_start + 600]
-                                    if best_excerpt_start > 0:
-                                        excerpt = "..." + excerpt
-                                    if best_excerpt_start + 600 < len(content):
-                                        excerpt = excerpt + "..."
+                                    st.caption(f"📄 Full document: {len(content)} characters")
                                     
-                                    st.text_area(
-                                        f"Excerpt from {doc.metadata.get('source', 'Unknown')}",
-                                        value=excerpt,
-                                        height=150,
-                                        disabled=True,
-                                        key=f"source_{idx}_{doc.metadata.get('file_id', 'unknown')}"
-                                    )
-                                    
-                                    st.caption(f"Document length: {len(content)} characters")
+                                    # Option to show full document
+                                    if st.button(f"View full document", key=f"view_full_{idx}_{doc.metadata.get('file_id', 'unknown')}"):
+                                        st.text_area(
+                                            "Full document content",
+                                            value=content,
+                                            height=300,
+                                            disabled=True,
+                                            key=f"full_content_{idx}_{doc.metadata.get('file_id', 'unknown')}"
+                                        )
                             
                             st.session_state.chat_history.append((user_question, answer))
                         else:
