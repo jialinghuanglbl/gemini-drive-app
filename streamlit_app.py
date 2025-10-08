@@ -96,7 +96,7 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
         common_words = {'this', 'that', 'these', 'those', 'there', 'where', 'when', 'what', 
                        'which', 'while', 'with', 'about', 'would', 'could', 'should', 'their',
                        'document', 'section', 'states', 'mentions', 'based', 'provided'}
-        answer_words = [w for w in answer_words if w not in common_words][:10]  # Top 10 answer keywords
+        answer_words = [w for w in answer_words if w not in common_words][:10]
     
     all_search_words = query_words + answer_words
     
@@ -106,7 +106,7 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     # Split content into chunks with overlap
     chunk_size = excerpt_length
     chunks = []
-    for i in range(0, len(content), chunk_size // 3):  # 66% overlap for better coverage
+    for i in range(0, len(content), chunk_size // 3):
         chunk_text = content[i:i + chunk_size]
         if chunk_text.strip():
             chunks.append((chunk_text, i))
@@ -117,12 +117,12 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
         chunk_lower = chunk_text.lower()
         score = 0
         
-        # Higher weight for query words (what the user asked)
+        # Higher weight for query words
         for word in query_words:
             count = chunk_lower.count(word)
             score += count * 3
         
-        # Medium weight for answer keywords (what the AI said)
+        # Medium weight for answer keywords
         for word in answer_words:
             count = chunk_lower.count(word)
             score += count * 2
@@ -139,7 +139,7 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
         score += unique_query_words * 4
         score += unique_answer_words * 2
         
-        # Bonus for word density (multiple relevant words in small area)
+        # Bonus for word density
         positions = []
         for word in all_search_words:
             pos = 0
@@ -151,15 +151,13 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
                 pos += 1
         
         if len(positions) > 2:
-            # Calculate how clustered the words are
             positions.sort()
             gaps = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
             avg_gap = sum(gaps) / len(gaps) if gaps else chunk_size
-            if avg_gap < chunk_size / 3:  # Words are clustered
+            if avg_gap < chunk_size / 3:
                 score += 8
         
         # Boost for exact phrase matches
-        query_phrases = []
         if len(query.split()) >= 2:
             words = query.lower().split()
             for i in range(len(words) - 1):
@@ -170,7 +168,6 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
         if score > 0:
             scored_chunks.append((chunk_text, start_pos, score))
     
-    # Sort by score
     scored_chunks.sort(key=lambda x: x[2], reverse=True)
     
     if not scored_chunks:
@@ -180,128 +177,7 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     results = []
     seen_positions = set()
     
-    for chunk_text, start_pos, score in scored_chunks[:num_excerpts * 2]:  # Get more candidates
-        # Avoid duplicate/overlapping excerpts
-        if any(abs(start_pos - seen) < chunk_size // 2 for seen in seen_positions):
-            continue
-        
-        seen_positions.add(start_pos)
-        
-        formatted = chunk_text.strip()
-        if start_pos > 0:
-            formatted = "..." + formatted
-        if start_pos + len(chunk_text) < len(content):
-            formatted = formatted + "..."
-        
-        results.append((formatted, score))
-        
-        if len(results) >= num_excerpts:
-            break
-    
-    return results if results else [(content[:excerpt_length] + "...", 0)]
-
-def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
-    """
-    Find the most relevant excerpts from content based on query and answer.
-    Returns list of (excerpt, relevance_score) tuples.
-    """
-    content_lower = content.lower()
-    query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]
-    
-    # Also extract key terms from the answer if provided
-    answer_words = []
-    if answer:
-        answer_words = [w.strip('?.,!;:') for w in answer.lower().split() if len(w) > 4]
-        # Filter out common words
-        common_words = {'this', 'that', 'these', 'those', 'there', 'where', 'when', 'what', 
-                       'which', 'while', 'with', 'about', 'would', 'could', 'should', 'their',
-                       'document', 'section', 'states', 'mentions', 'based', 'provided'}
-        answer_words = [w for w in answer_words if w not in common_words][:10]  # Top 10 answer keywords
-    
-    all_search_words = query_words + answer_words
-    
-    if not all_search_words:
-        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
-    
-    # Split content into chunks with overlap
-    chunk_size = excerpt_length
-    chunks = []
-    for i in range(0, len(content), chunk_size // 3):  # 66% overlap for better coverage
-        chunk_text = content[i:i + chunk_size]
-        if chunk_text.strip():
-            chunks.append((chunk_text, i))
-    
-    # Score each chunk
-    scored_chunks = []
-    for chunk_text, start_pos in chunks:
-        chunk_lower = chunk_text.lower()
-        score = 0
-        
-        # Higher weight for query words (what the user asked)
-        for word in query_words:
-            count = chunk_lower.count(word)
-            score += count * 3
-        
-        # Medium weight for answer keywords (what the AI said)
-        for word in answer_words:
-            count = chunk_lower.count(word)
-            score += count * 2
-        
-        # Bonus for having both query AND answer terms
-        has_query_term = any(word in chunk_lower for word in query_words)
-        has_answer_term = any(word in chunk_lower for word in answer_words)
-        if has_query_term and has_answer_term:
-            score += 10
-        
-        # Count unique words found
-        unique_query_words = sum(1 for word in query_words if word in chunk_lower)
-        unique_answer_words = sum(1 for word in answer_words if word in chunk_lower)
-        score += unique_query_words * 4
-        score += unique_answer_words * 2
-        
-        # Bonus for word density (multiple relevant words in small area)
-        positions = []
-        for word in all_search_words:
-            pos = 0
-            while pos < len(chunk_lower):
-                pos = chunk_lower.find(word, pos)
-                if pos == -1:
-                    break
-                positions.append(pos)
-                pos += 1
-        
-        if len(positions) > 2:
-            # Calculate how clustered the words are
-            positions.sort()
-            gaps = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
-            avg_gap = sum(gaps) / len(gaps) if gaps else chunk_size
-            if avg_gap < chunk_size / 3:  # Words are clustered
-                score += 8
-        
-        # Boost for exact phrase matches
-        query_phrases = []
-        if len(query.split()) >= 2:
-            words = query.lower().split()
-            for i in range(len(words) - 1):
-                phrase = ' '.join(words[i:i+2])
-                if phrase in chunk_lower:
-                    score += 15
-        
-        if score > 0:
-            scored_chunks.append((chunk_text, start_pos, score))
-    
-    # Sort by score
-    scored_chunks.sort(key=lambda x: x[2], reverse=True)
-    
-    if not scored_chunks:
-        return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
-    
-    # Format results
-    results = []
-    seen_positions = set()
-    
-    for chunk_text, start_pos, score in scored_chunks[:num_excerpts * 2]:  # Get more candidates
-        # Avoid duplicate/overlapping excerpts
+    for chunk_text, start_pos, score in scored_chunks[:num_excerpts * 2]:
         if any(abs(start_pos - seen) < chunk_size // 2 for seen in seen_positions):
             continue
         
@@ -321,33 +197,26 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     return results if results else [(content[:excerpt_length] + "...", 0)]
 
 def extract_drive_id_from_url(url: str) -> tuple[Optional[str], str]:
-    """
-    Extract Google Drive file/folder ID from URL
-    Returns: (id, type) where type is 'file' or 'folder'
-    """
+    """Extract Google Drive file/folder ID from URL"""
     import re
     
-    # Pattern for folder URLs: /folders/FOLDER_ID or ?id=FOLDER_ID
     folder_patterns = [
         r'/folders/([a-zA-Z0-9_-]+)',
         r'[?&]id=([a-zA-Z0-9_-]+)'
     ]
     
-    # Pattern for file URLs: /d/FILE_ID or ?id=FILE_ID
     file_patterns = [
         r'/d/([a-zA-Z0-9_-]+)',
         r'/file/d/([a-zA-Z0-9_-]+)',
         r'[?&]id=([a-zA-Z0-9_-]+)'
     ]
     
-    # Check for folder
     if '/folders/' in url or 'folder' in url.lower():
         for pattern in folder_patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1), 'folder'
     
-    # Check for file
     for pattern in file_patterns:
         match = re.search(pattern, url)
         if match:
@@ -469,7 +338,6 @@ def process_file(service, file_info: dict) -> Optional[Document]:
                 }
             )
     except Exception as e:
-        st.warning(f"Error processing {file_name}: {e}")
         return None
 
 def create_vector_store(documents: List[Document], gemini_api_key: str):
@@ -483,7 +351,6 @@ def create_vector_store(documents: List[Document], gemini_api_key: str):
     )
     chunks = text_splitter.split_documents(documents)
     
-    # Skip embeddings entirely, go straight to simple text search
     st.info(f"Using simple text search for {len(documents)} documents")
     return create_simple_text_store(documents)
 
@@ -495,13 +362,11 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        # Check for API key in secrets first
         default_api_key = st.secrets.get("GEMINI_API_KEY", "")
         
         if default_api_key:
             st.success("✅ Gemini API key loaded from secrets")
             gemini_api_key = default_api_key
-            # Show option to override
             if st.checkbox("Use different API key"):
                 gemini_api_key = st.text_input(
                     "Gemini API Key",
@@ -509,7 +374,6 @@ def main():
                     help="Enter a different Google Gemini API key"
                 )
         else:
-            # API Key input
             gemini_api_key = st.text_input(
                 "Gemini API Key",
                 type="password",
@@ -530,7 +394,6 @@ def main():
         
         st.divider()
         
-        # Check for service account credentials
         if "gcp_service_account" not in st.secrets:
             st.error("❌ Service account not configured")
             st.info("""
@@ -555,7 +418,6 @@ def main():
                 `{service_email}`
                 """)
     
-    # Create Drive service
     service = get_drive_service()
     if not service:
         st.error("Failed to connect to Google Drive")
@@ -564,14 +426,13 @@ def main():
     # Document loading interface
     st.header("📂 Load Documents")
     
-    # Option selector
-    load_option = st.radio(
+    # YOUR UI - Option selector with segmented_control
+    load_option = st.segmented_control(
         "Choose loading method:",
-        ["Paste URL", "Search files", "Browse by folder", "Search folders"],
-        horizontal=True
+        options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
     )
     
-    if load_option == "Paste URL":
+    if load_option == "🔗 Paste URL":
         drive_url = st.text_input(
             "🔗 Google Drive URL", 
             placeholder="Paste link to file or folder (e.g., https://drive.google.com/drive/folders/...)",
@@ -589,7 +450,6 @@ def main():
                     folder_search = None
                 else:
                     st.success(f"✅ Detected file ID: `{file_id}`")
-                    # Store as a list for processing
                     folder_id = None
                     search_term = None
                     folder_search = None
@@ -604,12 +464,12 @@ def main():
             search_term = None
             folder_search = None
             
-    elif load_option == "Search files":
-        search_term = st.text_input("🔍 Search for files", placeholder="Enter keywords to find files...")
+    elif load_option == "📄 Search files":
+        search_term = st.text_input("📄 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
         
-    elif load_option == "Browse by folder":
+    elif load_option == "📁 Browse by folder":
         folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
         folder_search = None
@@ -625,7 +485,6 @@ def main():
             if folders:
                 st.success(f"Found {len(folders)} matching folders:")
                 
-                # Create a selectbox for folders
                 folder_options = {f"{folder['name']}": folder['id'] for folder in folders}
                 selected_folder_name = st.selectbox(
                     "Select a folder to load documents from:",
@@ -640,7 +499,6 @@ def main():
     
     if st.button("🔄 Load Documents", use_container_width=True):
         with st.spinner("Loading documents from Google Drive..."):
-            # Handle URL-based single file
             if hasattr(st.session_state, 'url_file_id') and st.session_state.url_file_id:
                 try:
                     file_info = service.files().get(
@@ -650,7 +508,7 @@ def main():
                     
                     files = [file_info]
                     st.info(f"Loading file: {file_info['name']}")
-                    del st.session_state.url_file_id  # Clear after use
+                    del st.session_state.url_file_id
                 except Exception as e:
                     st.error(f"Error loading file from URL: {e}")
                     files = []
@@ -664,6 +522,13 @@ def main():
                 st.info(f"Found {len(files)} files. Processing...")
                 
                 documents = []
+                st.markdown("""
+                    <style>
+                    div[data-testid="stProgressBar"] > div > div > div {
+                        height: 256px !important;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
                 progress_bar = st.progress(0)
                 
                 for i, file_info in enumerate(files):
@@ -678,7 +543,6 @@ def main():
                     st.session_state.vector_store = create_vector_store(documents, gemini_api_key)
                     
                     if st.session_state.vector_store:
-                        # Store the API key for later use instead of creating model now
                         st.session_state.gemini_configured = True
                     
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
@@ -703,26 +567,9 @@ def main():
                     key=f"preview_{i}"
                 )
     
-    # Chat interface
+    # Chat interface with ENHANCED SOURCING
     if st.session_state.vector_store and st.session_state.get('gemini_configured'):
         st.header("💬 Chat with Your Documents")
-        
-        # Debug: Show available models
-        with st.expander("🔍 Debug: Check Available Models"):
-            try:
-                available_models = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-                
-                st.write("Available models for generateContent:")
-                for model_name in available_models:
-                    st.code(model_name)
-                
-                if available_models:
-                    st.info(f"Try using one of these model names: {available_models[0]}")
-            except Exception as e:
-                st.error(f"Could not list models: {e}")
         
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
@@ -738,7 +585,6 @@ def main():
             
             with st.chat_message("assistant"):
                 try:
-                    # Get relevant documents
                     if hasattr(st.session_state.vector_store, 'as_retriever'):
                         retriever = st.session_state.vector_store.as_retriever()
                         if hasattr(retriever, '_get_relevant_documents'):
@@ -748,12 +594,9 @@ def main():
                     else:
                         relevant_docs = st.session_state.documents
                     
-                    # Create context from documents - use full content
                     context = "\n\n".join([doc.page_content for doc in relevant_docs[:3]])
                     
-                    # Use native Gemini API directly - try multiple model names
                     with st.spinner("Thinking..."):
-                        # Use the models that actually exist for your API key
                         model_names = [
                             'models/gemini-2.0-flash',
                             'models/gemini-2.5-flash', 
@@ -775,7 +618,7 @@ Please provide a helpful and accurate answer based only on the information provi
                                 
                                 response = model.generate_content(prompt)
                                 answer = response.text
-                                break  # Success, exit loop
+                                break
                             except Exception as model_error:
                                 last_error = model_error
                                 continue
@@ -783,18 +626,18 @@ Please provide a helpful and accurate answer based only on the information provi
                         if answer:
                             st.write(answer)
                             
-                            # Show sources with intelligent excerpt extraction
+                            # ENHANCED SOURCING with answer-aware extraction
                             with st.expander("📚 Sources", expanded=True):
                                 for idx, doc in enumerate(relevant_docs[:3], 1):
                                     st.subheader(f"Source {idx}: {doc.metadata.get('source', 'Unknown')}")
                                     
                                     content = doc.page_content
                                     
-                                    # Find multiple relevant excerpts using both query AND answer
+                                    # Find excerpts using BOTH query AND answer
                                     excerpts = find_relevant_excerpts(
                                         content, 
                                         user_question, 
-                                        answer=answer,  # Pass the AI's answer to find matching excerpts
+                                        answer=answer,
                                         num_excerpts=2, 
                                         excerpt_length=600
                                     )
@@ -805,12 +648,9 @@ Please provide a helpful and accurate answer based only on the information provi
                                         else:
                                             st.markdown(f"**Most relevant section** (relevance score: {relevance_score})")
                                         
-                                        # Highlight search terms in the excerpt
-                                        highlighted_excerpt = excerpt
-                                        
                                         st.text_area(
                                             f"Excerpt {excerpt_idx}",
-                                            value=highlighted_excerpt,
+                                            value=excerpt,
                                             height=150,
                                             disabled=True,
                                             key=f"source_{idx}_excerpt_{excerpt_idx}_{doc.metadata.get('file_id', 'unknown')}",
@@ -821,7 +661,6 @@ Please provide a helpful and accurate answer based only on the information provi
                                     with col1:
                                         st.caption(f"📄 Full document: {len(content):,} characters")
                                     with col2:
-                                        # Option to show full document
                                         if st.button(f"View full doc", key=f"view_full_{idx}_{doc.metadata.get('file_id', 'unknown')}", use_container_width=True):
                                             st.session_state[f'show_full_{idx}'] = not st.session_state.get(f'show_full_{idx}', False)
                                     
@@ -841,7 +680,6 @@ Please provide a helpful and accurate answer based only on the information provi
                 except Exception as e:
                     st.error(f"⚠️ Error: {str(e)[:200]}")
                     
-                    # Fallback to showing document snippets
                     st.info("📝 Showing relevant document content instead:")
                     try:
                         if hasattr(st.session_state.vector_store, 'as_retriever'):
