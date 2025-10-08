@@ -80,75 +80,125 @@ def get_drive_service():
         st.error(f"Error creating Drive service: {e}")
         return None
 
-def find_relevant_excerpts(content: str, query: str, num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
+def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
     """
-    Find the most relevant excerpts from content based on query.
+    Find the most relevant excerpts from content based on query and answer.
     Returns list of (excerpt, relevance_score) tuples.
     """
     content_lower = content.lower()
-    query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]  # Filter out short words
+    query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]
     
-    if not query_words:
-        # Fallback: return beginning of document
+    # Also extract key terms from the answer if provided
+    answer_words = []
+    if answer:
+        answer_words = [w.strip('?.,!;:') for w in answer.lower().split() if len(w) > 4]
+        # Filter out common words
+        common_words = {'this', 'that', 'these', 'those', 'there', 'where', 'when', 'what', 
+                       'which', 'while', 'with', 'about', 'would', 'could', 'should', 'their',
+                       'document', 'section', 'states', 'mentions', 'based', 'provided'}
+        answer_words = [w for w in answer_words if w not in common_words][:10]  # Top 10 answer keywords
+    
+    all_search_words = query_words + answer_words
+    
+    if not all_search_words:
         return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
     
-    # Split content into chunks
+    # Split content into chunks with overlap
     chunk_size = excerpt_length
     chunks = []
-    for i in range(0, len(content), chunk_size // 2):  # 50% overlap
+    for i in range(0, len(content), chunk_size // 3):  # 66% overlap for better coverage
         chunk_text = content[i:i + chunk_size]
         if chunk_text.strip():
             chunks.append((chunk_text, i))
     
-    # Score each chunk based on query word presence
+    # Score each chunk
     scored_chunks = []
     for chunk_text, start_pos in chunks:
         chunk_lower = chunk_text.lower()
         score = 0
         
-        # Count exact word matches
+        # Higher weight for query words (what the user asked)
         for word in query_words:
-            score += chunk_lower.count(word) * 2
+            count = chunk_lower.count(word)
+            score += count * 3
         
-        # Bonus for multiple different query words in same chunk
-        unique_words_found = sum(1 for word in query_words if word in chunk_lower)
-        score += unique_words_found * 3
+        # Medium weight for answer keywords (what the AI said)
+        for word in answer_words:
+            count = chunk_lower.count(word)
+            score += count * 2
         
-        # Bonus for words appearing close together
+        # Bonus for having both query AND answer terms
+        has_query_term = any(word in chunk_lower for word in query_words)
+        has_answer_term = any(word in chunk_lower for word in answer_words)
+        if has_query_term and has_answer_term:
+            score += 10
+        
+        # Count unique words found
+        unique_query_words = sum(1 for word in query_words if word in chunk_lower)
+        unique_answer_words = sum(1 for word in answer_words if word in chunk_lower)
+        score += unique_query_words * 4
+        score += unique_answer_words * 2
+        
+        # Bonus for word density (multiple relevant words in small area)
         positions = []
-        for word in query_words:
-            pos = chunk_lower.find(word)
-            if pos != -1:
+        for word in all_search_words:
+            pos = 0
+            while pos < len(chunk_lower):
+                pos = chunk_lower.find(word, pos)
+                if pos == -1:
+                    break
                 positions.append(pos)
+                pos += 1
         
-        if len(positions) > 1:
-            # Calculate proximity bonus (closer words = higher score)
-            max_distance = max(positions) - min(positions)
-            if max_distance < chunk_size / 2:
-                score += 5
+        if len(positions) > 2:
+            # Calculate how clustered the words are
+            positions.sort()
+            gaps = [positions[i+1] - positions[i] for i in range(len(positions)-1)]
+            avg_gap = sum(gaps) / len(gaps) if gaps else chunk_size
+            if avg_gap < chunk_size / 3:  # Words are clustered
+                score += 8
+        
+        # Boost for exact phrase matches
+        query_phrases = []
+        if len(query.split()) >= 2:
+            words = query.lower().split()
+            for i in range(len(words) - 1):
+                phrase = ' '.join(words[i:i+2])
+                if phrase in chunk_lower:
+                    score += 15
         
         if score > 0:
             scored_chunks.append((chunk_text, start_pos, score))
     
-    # Sort by score and return top excerpts
+    # Sort by score
     scored_chunks.sort(key=lambda x: x[2], reverse=True)
     
     if not scored_chunks:
-        # No matches found, return beginning
         return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
     
-    # Return top excerpts with formatting
+    # Format results
     results = []
-    for chunk_text, start_pos, score in scored_chunks[:num_excerpts]:
-        # Add ellipsis if not at start/end
-        formatted = chunk_text
+    seen_positions = set()
+    
+    for chunk_text, start_pos, score in scored_chunks[:num_excerpts * 2]:  # Get more candidates
+        # Avoid duplicate/overlapping excerpts
+        if any(abs(start_pos - seen) < chunk_size // 2 for seen in seen_positions):
+            continue
+        
+        seen_positions.add(start_pos)
+        
+        formatted = chunk_text.strip()
         if start_pos > 0:
             formatted = "..." + formatted
         if start_pos + len(chunk_text) < len(content):
             formatted = formatted + "..."
-        results.append((formatted.strip(), score))
+        
+        results.append((formatted, score))
+        
+        if len(results) >= num_excerpts:
+            break
     
-    return results
+    return results if results else [(content[:excerpt_length] + "...", 0)]
 
 def extract_drive_id_from_url(url: str) -> tuple[Optional[str], str]:
     """
@@ -299,7 +349,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
                 }
             )
     except Exception as e:
-        # Prevent crashing on single file errors
+        st.warning(f"Error processing {file_name}: {e}")
         return None
 
 def create_vector_store(documents: List[Document], gemini_api_key: str):
@@ -395,12 +445,13 @@ def main():
     st.header("📂 Load Documents")
     
     # Option selector
-    load_option = st.segmented_control(
-    "Choose loading method:",
-    options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
-)
+    load_option = st.radio(
+        "Choose loading method:",
+        ["Paste URL", "Search files", "Browse by folder", "Search folders"],
+        horizontal=True
+    )
     
-    if load_option == "🔗 Paste URL":
+    if load_option == "Paste URL":
         drive_url = st.text_input(
             "🔗 Google Drive URL", 
             placeholder="Paste link to file or folder (e.g., https://drive.google.com/drive/folders/...)",
@@ -433,12 +484,12 @@ def main():
             search_term = None
             folder_search = None
             
-    elif load_option == "📄 Search files":
-        search_term = st.text_input("📄 Search for files", placeholder="Enter keywords to find files...")
+    elif load_option == "Search files":
+        search_term = st.text_input("🔍 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
         
-    elif load_option == "📁 Browse by folder":
+    elif load_option == "Browse by folder":
         folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
         folder_search = None
@@ -493,14 +544,6 @@ def main():
                 st.info(f"Found {len(files)} files. Processing...")
                 
                 documents = []
-                # Inject custom CSS to make the progress bar bigger
-                st.markdown("""
-                    <style>
-                    div[data-testid="stProgressBar"] > div > div > div {
-                        height: 256px !important;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
                 progress_bar = st.progress(0)
                 
                 for i, file_info in enumerate(files):
@@ -543,6 +586,23 @@ def main():
     # Chat interface
     if st.session_state.vector_store and st.session_state.get('gemini_configured'):
         st.header("💬 Chat with Your Documents")
+        
+        # Debug: Show available models
+        with st.expander("🔍 Debug: Check Available Models"):
+            try:
+                available_models = []
+                for m in genai.list_models():
+                    if 'generateContent' in m.supported_generation_methods:
+                        available_models.append(m.name)
+                
+                st.write("Available models for generateContent:")
+                for model_name in available_models:
+                    st.code(model_name)
+                
+                if available_models:
+                    st.info(f"Try using one of these model names: {available_models[0]}")
+            except Exception as e:
+                st.error(f"Could not list models: {e}")
         
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
@@ -604,32 +664,48 @@ Please provide a helpful and accurate answer based only on the information provi
                             st.write(answer)
                             
                             # Show sources with intelligent excerpt extraction
-                            with st.expander("📚 Sources"):
+                            with st.expander("📚 Sources", expanded=True):
                                 for idx, doc in enumerate(relevant_docs[:3], 1):
                                     st.subheader(f"Source {idx}: {doc.metadata.get('source', 'Unknown')}")
                                     
                                     content = doc.page_content
                                     
-                                    # Find multiple relevant excerpts
-                                    excerpts = find_relevant_excerpts(content, user_question, num_excerpts=2, excerpt_length=500)
+                                    # Find multiple relevant excerpts using both query AND answer
+                                    excerpts = find_relevant_excerpts(
+                                        content, 
+                                        user_question, 
+                                        answer=answer,  # Pass the AI's answer to find matching excerpts
+                                        num_excerpts=2, 
+                                        excerpt_length=600
+                                    )
                                     
                                     for excerpt_idx, (excerpt, relevance_score) in enumerate(excerpts, 1):
                                         if len(excerpts) > 1:
-                                            st.markdown(f"**Relevant section {excerpt_idx}** (relevance: {relevance_score})")
+                                            st.markdown(f"**Relevant section {excerpt_idx}** (relevance score: {relevance_score})")
+                                        else:
+                                            st.markdown(f"**Most relevant section** (relevance score: {relevance_score})")
+                                        
+                                        # Highlight search terms in the excerpt
+                                        highlighted_excerpt = excerpt
                                         
                                         st.text_area(
                                             f"Excerpt {excerpt_idx}",
-                                            value=excerpt,
-                                            height=120,
+                                            value=highlighted_excerpt,
+                                            height=150,
                                             disabled=True,
                                             key=f"source_{idx}_excerpt_{excerpt_idx}_{doc.metadata.get('file_id', 'unknown')}",
                                             label_visibility="collapsed"
                                         )
                                     
-                                    st.caption(f"📄 Full document: {len(content)} characters")
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.caption(f"📄 Full document: {len(content):,} characters")
+                                    with col2:
+                                        # Option to show full document
+                                        if st.button(f"View full doc", key=f"view_full_{idx}_{doc.metadata.get('file_id', 'unknown')}", use_container_width=True):
+                                            st.session_state[f'show_full_{idx}'] = not st.session_state.get(f'show_full_{idx}', False)
                                     
-                                    # Option to show full document
-                                    if st.button(f"View full document", key=f"view_full_{idx}_{doc.metadata.get('file_id', 'unknown')}"):
+                                    if st.session_state.get(f'show_full_{idx}', False):
                                         st.text_area(
                                             "Full document content",
                                             value=content,
