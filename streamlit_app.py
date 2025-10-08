@@ -497,7 +497,7 @@ def main():
                 st.markdown("""
                     <style>
                     div[data-testid="stProgressBar"] > div > div > div {
-                        height: 64px !important;
+                        height: 256px !important;
                     }
                     </style>
                 """, unsafe_allow_html=True)
