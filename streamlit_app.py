@@ -395,11 +395,10 @@ def main():
     st.header("📂 Load Documents")
     
     # Option selector
-    load_option = st.radio(
-        "Choose loading method:",
-        ["Paste URL", "Search files", "Browse by folder", "Search folders"],
-        horizontal=True
-    )
+    load_option = st.segmented_control(
+    "Choose loading method:",
+    options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
+)
     
     if load_option == "Paste URL":
         drive_url = st.text_input(
