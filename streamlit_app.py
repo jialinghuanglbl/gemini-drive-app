@@ -543,11 +543,40 @@ Please provide a helpful and accurate answer based only on the information provi
                         if answer:
                             st.write(answer)
                             
-                            # Show sources
+                            # Show sources with better context
                             with st.expander("📚 Sources"):
-                                for doc in relevant_docs[:3]:
-                                    st.caption(f"From: {doc.metadata.get('source', 'Unknown')}")
-                                    st.text(doc.page_content[:200] + "...")
+                                for idx, doc in enumerate(relevant_docs[:3], 1):
+                                    st.subheader(f"Source {idx}: {doc.metadata.get('source', 'Unknown')}")
+                                    
+                                    # Show relevant excerpt around the answer
+                                    content = doc.page_content
+                                    
+                                    # Try to find the most relevant part based on the question
+                                    query_words = user_question.lower().split()
+                                    best_excerpt_start = 0
+                                    
+                                    for word in query_words[:3]:  # Check first 3 words of question
+                                        if word in content.lower():
+                                            word_pos = content.lower().find(word)
+                                            best_excerpt_start = max(0, word_pos - 300)
+                                            break
+                                    
+                                    # Show a meaningful excerpt (600 chars = ~100 words)
+                                    excerpt = content[best_excerpt_start:best_excerpt_start + 600]
+                                    if best_excerpt_start > 0:
+                                        excerpt = "..." + excerpt
+                                    if best_excerpt_start + 600 < len(content):
+                                        excerpt = excerpt + "..."
+                                    
+                                    st.text_area(
+                                        f"Excerpt from {doc.metadata.get('source', 'Unknown')}",
+                                        value=excerpt,
+                                        height=150,
+                                        disabled=True,
+                                        key=f"source_{idx}_{doc.metadata.get('file_id', 'unknown')}"
+                                    )
+                                    
+                                    st.caption(f"Document length: {len(content)} characters")
                             
                             st.session_state.chat_history.append((user_question, answer))
                         else:
