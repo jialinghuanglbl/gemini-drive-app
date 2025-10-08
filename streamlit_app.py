@@ -400,7 +400,7 @@ def main():
     options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
 )
     
-    if load_option == "Paste URL":
+    if load_option == "🔗 Paste URL":
         drive_url = st.text_input(
             "🔗 Google Drive URL", 
             placeholder="Paste link to file or folder (e.g., https://drive.google.com/drive/folders/...)",
