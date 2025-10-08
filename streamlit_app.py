@@ -255,13 +255,27 @@ def main():
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        # API Key input
-        gemini_api_key = st.text_input(
-            "Gemini API Key",
-            type="password",
-            help="Enter your Google Gemini API key",
-            value=st.session_state.get('gemini_api_key', '')
-        )
+        # Check for API key in secrets first
+        default_api_key = st.secrets.get("GEMINI_API_KEY", "")
+        
+        if default_api_key:
+            st.success("✅ Gemini API key loaded from secrets")
+            gemini_api_key = default_api_key
+            # Show option to override
+            if st.checkbox("Use different API key"):
+                gemini_api_key = st.text_input(
+                    "Gemini API Key",
+                    type="password",
+                    help="Enter a different Google Gemini API key"
+                )
+        else:
+            # API Key input
+            gemini_api_key = st.text_input(
+                "Gemini API Key",
+                type="password",
+                help="Enter your Google Gemini API key",
+                value=st.session_state.get('gemini_api_key', '')
+            )
         
         if gemini_api_key:
             st.session_state.gemini_api_key = gemini_api_key
