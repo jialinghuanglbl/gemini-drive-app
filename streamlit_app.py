@@ -355,6 +355,34 @@ def create_vector_store(documents: List[Document], gemini_api_key: str):
     return create_simple_text_store(documents)
 
 def main():
+    # Add custom CSS for sticky header
+    st.markdown("""
+        <style>
+        /* Make the header sticky */
+        [data-testid="stHeader"] {
+            position: sticky;
+            top: 0;
+            background-color: white;
+            z-index: 999;
+        }
+        
+        /* For dark mode */
+        [data-testid="stHeader"][data-theme="dark"] {
+            background-color: #0e1117;
+        }
+        
+        /* Style the title to be part of sticky area */
+        .main > div:first-child {
+            position: sticky;
+            top: 3.5rem;
+            background: inherit;
+            z-index: 998;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     st.title("📚 Google Drive AI Chat")
     st.markdown("Chat with your Google Drive documents using AI")
     
