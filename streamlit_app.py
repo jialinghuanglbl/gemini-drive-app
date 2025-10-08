@@ -324,10 +324,12 @@ def main():
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Configuration")
-        
+        # Dark mode toggle
+        dark_mode = st.checkbox("🌙 Enable dark mode")
+        st.session_state.dark_mode = dark_mode
+        # ...existing code...
         # Check for API key in secrets first
         default_api_key = st.secrets.get("GEMINI_API_KEY", "")
-        
         if default_api_key:
             st.success("✅ Gemini API key loaded from secrets")
             gemini_api_key = default_api_key
@@ -346,7 +348,6 @@ def main():
                 help="Enter your Google Gemini API key",
                 value=st.session_state.get('gemini_api_key', '')
             )
-        
         if gemini_api_key:
             st.session_state.gemini_api_key = gemini_api_key
             genai.configure(api_key=gemini_api_key)
@@ -357,9 +358,7 @@ def main():
             [Google AI Studio](https://aistudio.google.com/)
             """)
             st.stop()
-        
         st.divider()
-        
         # Check for service account credentials
         if "gcp_service_account" not in st.secrets:
             st.error("❌ Service account not configured")
@@ -384,6 +383,27 @@ def main():
                 
                 `{service_email}`
                 """)
+    # Inject dark mode CSS if enabled
+    if st.session_state.get("dark_mode"):
+        st.markdown("""
+        <style>
+        body, .main, [data-testid="stAppViewContainer"], [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {
+            background-color: #181818 !important;
+            color: #e0e0e0 !important;
+        }
+        .stTextInput > div > input, .stTextArea > div > textarea, .stSelectbox > div, .stButton > button {
+            background-color: #222 !important;
+            color: #e0e0e0 !important;
+            border-color: #444 !important;
+        }
+        .stProgress > div > div > div {
+            background-color: #1976d2 !important;
+        }
+        .stMarkdown, .stCaption, .stSubheader, .stHeader, .stTitle {
+            color: #e0e0e0 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
     
     # Create Drive service
     service = get_drive_service()
