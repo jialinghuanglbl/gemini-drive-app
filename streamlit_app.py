@@ -80,6 +80,41 @@ def get_drive_service():
         st.error(f"Error creating Drive service: {e}")
         return None
 
+def extract_drive_id_from_url(url: str) -> tuple[Optional[str], str]:
+    """
+    Extract Google Drive file/folder ID from URL
+    Returns: (id, type) where type is 'file' or 'folder'
+    """
+    import re
+    
+    # Pattern for folder URLs: /folders/FOLDER_ID or ?id=FOLDER_ID
+    folder_patterns = [
+        r'/folders/([a-zA-Z0-9_-]+)',
+        r'[?&]id=([a-zA-Z0-9_-]+)'
+    ]
+    
+    # Pattern for file URLs: /d/FILE_ID or ?id=FILE_ID
+    file_patterns = [
+        r'/d/([a-zA-Z0-9_-]+)',
+        r'/file/d/([a-zA-Z0-9_-]+)',
+        r'[?&]id=([a-zA-Z0-9_-]+)'
+    ]
+    
+    # Check for folder
+    if '/folders/' in url or 'folder' in url.lower():
+        for pattern in folder_patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1), 'folder'
+    
+    # Check for file
+    for pattern in file_patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1), 'file'
+    
+    return None, 'unknown'
+
 def list_drive_folders(service, parent_id: Optional[str] = 'root', search_term: Optional[str] = None):
     """List folders from Google Drive"""
     try:
@@ -278,11 +313,44 @@ def main():
     # Option selector
     load_option = st.radio(
         "Choose loading method:",
-        ["Search files", "Browse by folder", "Search folders"],
+        ["Paste URL", "Search files", "Browse by folder", "Search folders"],
         horizontal=True
     )
     
-    if load_option == "Search files":
+    if load_option == "Paste URL":
+        drive_url = st.text_input(
+            "🔗 Google Drive URL", 
+            placeholder="Paste link to file or folder (e.g., https://drive.google.com/drive/folders/...)",
+            help="Paste any Google Drive file or folder URL"
+        )
+        
+        if drive_url:
+            file_id, file_type = extract_drive_id_from_url(drive_url)
+            
+            if file_id:
+                if file_type == 'folder':
+                    st.success(f"✅ Detected folder ID: `{file_id}`")
+                    folder_id = file_id
+                    search_term = None
+                    folder_search = None
+                else:
+                    st.success(f"✅ Detected file ID: `{file_id}`")
+                    # Store as a list for processing
+                    folder_id = None
+                    search_term = None
+                    folder_search = None
+                    st.session_state.url_file_id = file_id
+            else:
+                st.error("❌ Could not extract ID from URL. Make sure you're pasting a valid Google Drive link.")
+                folder_id = None
+                search_term = None
+                folder_search = None
+        else:
+            folder_id = None
+            search_term = None
+            folder_search = None
+            
+    elif load_option == "Search files":
         search_term = st.text_input("🔍 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
@@ -318,7 +386,22 @@ def main():
     
     if st.button("🔄 Load Documents", use_container_width=True):
         with st.spinner("Loading documents from Google Drive..."):
-            files = list_drive_files(service, folder_id, search_term)
+            # Handle URL-based single file
+            if hasattr(st.session_state, 'url_file_id') and st.session_state.url_file_id:
+                try:
+                    file_info = service.files().get(
+                        fileId=st.session_state.url_file_id,
+                        fields="id, name, mimeType, shortcutDetails"
+                    ).execute()
+                    
+                    files = [file_info]
+                    st.info(f"Loading file: {file_info['name']}")
+                    del st.session_state.url_file_id  # Clear after use
+                except Exception as e:
+                    st.error(f"Error loading file from URL: {e}")
+                    files = []
+            else:
+                files = list_drive_files(service, folder_id, search_term)
             
             if not files:
                 st.warning("No matching documents found")
