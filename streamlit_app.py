@@ -391,43 +391,21 @@ def create_vector_store(documents: List[Document], cborg_api_key: str):
 
 def main():
     st.title("📚 Google Drive AI Chat - CBORG")
-    st.markdown("Chat with your Google Drive documents using the CBORG Chatbot")
+    st.markdown("Chat with your Google Drive documents using LBNL's CBORG LLM")
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        # Check for API key in secrets first
-        default_api_key = st.secrets.get("CBORG_API_KEY", "")
-        
-        if default_api_key:
-            st.success("✅ CBORG API key loaded from secrets")
-            cborg_api_key = default_api_key
-            # Show option to override
-            if st.checkbox("Use different API key"):
-                cborg_api_key = st.text_input(
-                    "CBORG API Key",
-                    type="password",
-                    help="Enter a different CBORG API key"
-                )
-        else:
-            # API Key input
-            cborg_api_key = st.text_input(
-                "CBORG API Key",
-                type="password",
-                help="Enter your CBORG API key from LBNL",
-                value=st.session_state.get('cborg_api_key', '')
-            )
-        
-        if cborg_api_key:
-            st.session_state.cborg_api_key = cborg_api_key
-        else:
-            st.warning("⚠️ Please enter your CBORG API key")
-            st.info("""
-            Get your API key from:
-            [CBORG Platform](https://api.cborg.lbl.gov/)
-            """)
+        # Get CBORG API key from secrets
+        if "CBORG_API_KEY" not in st.secrets:
+            st.error("❌ CBORG API key not found in secrets")
+            st.info("Please add CBORG_API_KEY to your Streamlit secrets")
             st.stop()
+        
+        cborg_api_key = st.secrets["CBORG_API_KEY"]
+        st.success("✅ CBORG API key loaded")
+        st.session_state.cborg_api_key = cborg_api_key
         
         # Model selection
         st.subheader("Model Selection")
@@ -590,13 +568,13 @@ def main():
                 
                 if documents:
                     st.session_state.documents = documents
-                    
                     st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
                     
                     if st.session_state.vector_store:
                         st.session_state.cborg_configured = True
                     
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
+                    st.info("💬 Scroll down to start chatting with your documents!")
                 else:
                     st.error("No documents could be processed")
     
@@ -726,7 +704,7 @@ Please provide a helpful and accurate answer based only on the information provi
                             
                             st.session_state.chat_history.append((user_question, answer))
                         else:
-                            raise last_error if last_error else Exception("All model attempts failed")
+                            st.error("Failed to get response from CBORG")
                 
                 except Exception as e:
                     st.error(f"⚠️ Error: {str(e)[:200]}")
