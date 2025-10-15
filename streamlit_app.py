@@ -1,3 +1,4 @@
+import requests
 import streamlit as st
 import json
 from io import BytesIO
@@ -370,6 +371,17 @@ def create_vector_store(documents: List[Document], cborg_api_key: str):
     return create_simple_text_store(documents)
 
 def main():
+    def get_cborg_models(api_key):
+        api_url = "https://api.cborg.lbl.gov/v1/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        try:
+            response = requests.get(api_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            models = response.json().get("data", [])
+            return [m["id"] for m in models]
+        except Exception as e:
+            st.warning(f"Could not fetch CBORG models: {e}")
+            return []
     st.title("📚 Google Drive AI Chat - CBORG")
     st.markdown("Chat with your Google Drive documents using CBORG models")
     
@@ -387,19 +399,19 @@ def main():
         st.success("✅ CBORG API key loaded")
         st.session_state.cborg_api_key = cborg_api_key
         
-        # Model selection
+        # Model selection (fetch from API)
         st.subheader("Model Selection")
-        model_choice = st.selectbox(
-            "Choose CBORG model:",
-            [
-                "llama-3.1-70b-instruct",
-                "llama-3.1-8b-instruct",
-                "mistral-7b-instruct"
-            ],
-            index=0,
-            help="Select which CBORG model to use"
-        )
-        st.session_state.cborg_model = model_choice
+        available_models = get_cborg_models(cborg_api_key)
+        if available_models:
+            model_choice = st.selectbox(
+                "Choose CBORG model:",
+                available_models,
+                index=0,
+                help="Select which CBORG model to use"
+            )
+            st.session_state.cborg_model = model_choice
+        else:
+            st.warning("No valid CBORG models found for your API key.")
         
         st.divider()
         
