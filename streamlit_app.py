@@ -84,17 +84,17 @@ def query_cborg(prompt: str, api_key: str, model: str = "llama-3.1-70b-instruct"
     
     import streamlit as st
     try:
-        st.info(f"CBORG API payload: {payload}")
+        # st.info(f"CBORG API payload: {payload}")
         response = requests.post(api_url, headers=headers, json=payload, timeout=60)
-        st.info(f"CBORG API response status: {response.status_code}")
-        if response.status_code != 200:
-            st.error(f"CBORG API error {response.status_code}: {response.text}")
+        # st.info(f"CBORG API response status: {response.status_code}")
+        # if response.status_code != 200:
+        #     st.error(f"CBORG API error {response.status_code}: {response.text}")
         response.raise_for_status()
         result = response.json()
-        st.info(f"CBORG API raw response: {result}")
+        # st.info(f"CBORG API raw response: {result}")
         return result['choices'][0]['message']['content']
     except requests.exceptions.RequestException as e:
-        st.error(f"CBORG API exception: {str(e)}")
+        # st.error(f"CBORG API exception: {str(e)}")
         raise Exception(f"CBORG API error: {str(e)}")
 
 def get_drive_service():
