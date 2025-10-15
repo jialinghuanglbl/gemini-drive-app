@@ -2,8 +2,8 @@ import streamlit as st
 import json
 from io import BytesIO
 from typing import List, Optional
+import requests
 
-import google.generativeai as genai
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -12,7 +12,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Page configuration
 st.set_page_config(
-    page_title="Google Drive AI Chat",
+    page_title="Google Drive AI Chat - CBORG",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -61,6 +61,41 @@ def create_simple_text_store(documents: List[Document]):
             return SimpleTextRetriever(self._documents)
     
     return SimpleTextStore(documents)
+
+def query_cborg(prompt: str, api_key: str, model: str = "llama-3.1-70b-instruct") -> str:
+    """
+    Query CBORG API with a prompt
+    Returns the response text
+    """
+    # CBORG API endpoint
+    api_url = "https://api.cborg.lbl.gov/chat/completions"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 2000
+    }
+    
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"CBORG API error: {str(e)}")
 
 def get_drive_service():
     """Create Google Drive service using service account credentials"""
@@ -340,7 +375,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
     except Exception as e:
         return None
 
-def create_vector_store(documents: List[Document], gemini_api_key: str):
+def create_vector_store(documents: List[Document], cborg_api_key: str):
     """Create simple text store (no embeddings to avoid quota issues)"""
     if not documents:
         return None
@@ -355,42 +390,58 @@ def create_vector_store(documents: List[Document], gemini_api_key: str):
     return create_simple_text_store(documents)
 
 def main():
-    st.title("📚 Google Drive AI Chat")
-    st.markdown("Chat with your Google Drive documents using AI")
+    st.title("📚 Google Drive AI Chat - CBORG")
+    st.markdown("Chat with your Google Drive documents using the CBORG Chatbot")
     
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Configuration")
         
-        default_api_key = st.secrets.get("GEMINI_API_KEY", "")
+        # Check for API key in secrets first
+        default_api_key = st.secrets.get("CBORG_API_KEY", "")
         
         if default_api_key:
-            st.success("✅ Gemini API key loaded from secrets")
-            gemini_api_key = default_api_key
+            st.success("✅ CBORG API key loaded from secrets")
+            cborg_api_key = default_api_key
+            # Show option to override
             if st.checkbox("Use different API key"):
-                gemini_api_key = st.text_input(
-                    "Gemini API Key",
+                cborg_api_key = st.text_input(
+                    "CBORG API Key",
                     type="password",
-                    help="Enter a different Google Gemini API key"
+                    help="Enter a different CBORG API key"
                 )
         else:
-            gemini_api_key = st.text_input(
-                "Gemini API Key",
+            # API Key input
+            cborg_api_key = st.text_input(
+                "CBORG API Key",
                 type="password",
-                help="Enter your Google Gemini API key",
-                value=st.session_state.get('gemini_api_key', '')
+                help="Enter your CBORG API key from LBNL",
+                value=st.session_state.get('cborg_api_key', '')
             )
         
-        if gemini_api_key:
-            st.session_state.gemini_api_key = gemini_api_key
-            genai.configure(api_key=gemini_api_key)
+        if cborg_api_key:
+            st.session_state.cborg_api_key = cborg_api_key
         else:
-            st.warning("⚠️ Please enter your Gemini API key")
+            st.warning("⚠️ Please enter your CBORG API key")
             st.info("""
             Get your API key from:
-            [Google AI Studio](https://aistudio.google.com/)
+            [CBORG Platform](https://api.cborg.lbl.gov/)
             """)
             st.stop()
+        
+        # Model selection
+        st.subheader("Model Selection")
+        model_choice = st.selectbox(
+            "Choose CBORG model:",
+            [
+                "llama-3.1-70b-instruct",
+                "llama-3.1-8b-instruct",
+                "mistral-7b-instruct"
+            ],
+            index=0,
+            help="Select which CBORG model to use"
+        )
+        st.session_state.cborg_model = model_choice
         
         st.divider()
         
@@ -540,10 +591,10 @@ def main():
                 if documents:
                     st.session_state.documents = documents
                     
-                    st.session_state.vector_store = create_vector_store(documents, gemini_api_key)
+                    st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
                     
                     if st.session_state.vector_store:
-                        st.session_state.gemini_configured = True
+                        st.session_state.cborg_configured = True
                     
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
                 else:
