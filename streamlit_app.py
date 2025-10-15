@@ -23,15 +23,13 @@ if 'documents' not in st.session_state:
     st.session_state.documents = []
 if 'vector_store' not in st.session_state:
     st.session_state.vector_store = None
-if 'retrieval_chain' not in st.session_state:
-    st.session_state.retrieval_chain = None
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 class SimpleTextRetriever(BaseRetriever):
-    """Simple text-based retriever for when embeddings fail"""
+    """Simple text-based retriever"""
     
     def __init__(self, documents: List[Document]):
         super().__init__()
@@ -63,11 +61,7 @@ def create_simple_text_store(documents: List[Document]):
     return SimpleTextStore(documents)
 
 def query_cborg(prompt: str, api_key: str, model: str = "llama-3.1-70b-instruct") -> str:
-    """
-    Query CBORG API with a prompt
-    Returns the response text
-    """
-    # CBORG API endpoint
+    """Query CBORG API with a prompt"""
     api_url = "https://api.cborg.lbl.gov/chat/completions"
     
     headers = {
@@ -100,34 +94,24 @@ def query_cborg(prompt: str, api_key: str, model: str = "llama-3.1-70b-instruct"
 def get_drive_service():
     """Create Google Drive service using service account credentials"""
     try:
-        # Get service account info from Streamlit secrets
         service_account_info = st.secrets["gcp_service_account"]
-        
-        # Create credentials
         credentials = service_account.Credentials.from_service_account_info(
             service_account_info,
             scopes=SCOPES
         )
-        
-        # Build and return service
         return build('drive', 'v3', credentials=credentials)
     except Exception as e:
         st.error(f"Error creating Drive service: {e}")
         return None
 
 def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excerpts: int = 3, excerpt_length: int = 400) -> List[tuple[str, int]]:
-    """
-    Find the most relevant excerpts from content based on query and answer.
-    Returns list of (excerpt, relevance_score) tuples.
-    """
+    """Find the most relevant excerpts from content based on query and answer"""
     content_lower = content.lower()
     query_words = [w.strip('?.,!;:') for w in query.lower().split() if len(w) > 3]
     
-    # Also extract key terms from the answer if provided
     answer_words = []
     if answer:
         answer_words = [w.strip('?.,!;:') for w in answer.lower().split() if len(w) > 4]
-        # Filter out common words
         common_words = {'this', 'that', 'these', 'those', 'there', 'where', 'when', 'what', 
                        'which', 'while', 'with', 'about', 'would', 'could', 'should', 'their',
                        'document', 'section', 'states', 'mentions', 'based', 'provided'}
@@ -138,7 +122,6 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     if not all_search_words:
         return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
     
-    # Split content into chunks with overlap
     chunk_size = excerpt_length
     chunks = []
     for i in range(0, len(content), chunk_size // 3):
@@ -146,35 +129,29 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
         if chunk_text.strip():
             chunks.append((chunk_text, i))
     
-    # Score each chunk
     scored_chunks = []
     for chunk_text, start_pos in chunks:
         chunk_lower = chunk_text.lower()
         score = 0
         
-        # Higher weight for query words
         for word in query_words:
             count = chunk_lower.count(word)
             score += count * 3
         
-        # Medium weight for answer keywords
         for word in answer_words:
             count = chunk_lower.count(word)
             score += count * 2
         
-        # Bonus for having both query AND answer terms
         has_query_term = any(word in chunk_lower for word in query_words)
         has_answer_term = any(word in chunk_lower for word in answer_words)
         if has_query_term and has_answer_term:
             score += 10
         
-        # Count unique words found
         unique_query_words = sum(1 for word in query_words if word in chunk_lower)
         unique_answer_words = sum(1 for word in answer_words if word in chunk_lower)
         score += unique_query_words * 4
         score += unique_answer_words * 2
         
-        # Bonus for word density
         positions = []
         for word in all_search_words:
             pos = 0
@@ -192,7 +169,6 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
             if avg_gap < chunk_size / 3:
                 score += 8
         
-        # Boost for exact phrase matches
         if len(query.split()) >= 2:
             words = query.lower().split()
             for i in range(len(words) - 1):
@@ -208,7 +184,6 @@ def find_relevant_excerpts(content: str, query: str, answer: str = "", num_excer
     if not scored_chunks:
         return [(content[:excerpt_length] + "..." if len(content) > excerpt_length else content, 0)]
     
-    # Format results
     results = []
     seen_positions = set()
     
@@ -376,7 +351,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
         return None
 
 def create_vector_store(documents: List[Document], cborg_api_key: str):
-    """Create simple text store (no embeddings to avoid quota issues)"""
+    """Create simple text store"""
     if not documents:
         return None
     
@@ -423,6 +398,7 @@ def main():
         
         st.divider()
         
+        # Service account check
         if "gcp_service_account" not in st.secrets:
             st.error("❌ Service account not configured")
             st.info("""
@@ -432,8 +408,6 @@ def main():
             2. Download the JSON key file
             3. Share your Google Drive files with the service account email
             4. Add the JSON content to Streamlit secrets as `gcp_service_account`
-            
-            [Learn more](https://docs.streamlit.io/knowledge-base/tutorials/databases/gcs)
             """)
             st.stop()
         else:
@@ -455,7 +429,6 @@ def main():
     # Document loading interface
     st.header("📂 Load Documents")
     
-    # YOUR UI - Option selector with segmented_control
     load_option = st.segmented_control(
         "Choose loading method:",
         options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
@@ -551,13 +524,6 @@ def main():
                 st.info(f"Found {len(files)} files. Processing...")
                 
                 documents = []
-                st.markdown("""
-                    <style>
-                    div[data-testid="stProgressBar"] > div > div > div {
-                        height: 256px !important;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
                 progress_bar = st.progress(0)
                 
                 for i, file_info in enumerate(files):
@@ -570,11 +536,8 @@ def main():
                     st.session_state.documents = documents
                     st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
                     
-                    if st.session_state.vector_store:
-                        st.session_state.cborg_configured = True
-                    
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
-                    st.info("💬 Scroll down to start chatting with your documents!")
+                    st.info("💬 Chat box should appear below!")
                 else:
                     st.error("No documents could be processed")
     
@@ -596,9 +559,18 @@ def main():
                     key=f"preview_{i}"
                 )
     
-    # Chat interface with ENHANCED SOURCING
-    if st.session_state.vector_store and st.session_state.get('gemini_configured'):
+    # DEBUG INFO
+    st.divider()
+    st.write("🔍 DEBUG INFO:")
+    st.write(f"- Documents loaded: {len(st.session_state.documents)}")
+    st.write(f"- Vector store exists: {st.session_state.vector_store is not None}")
+    st.write(f"- Should show chat: {st.session_state.documents and st.session_state.vector_store}")
+    st.divider()
+    
+    # Chat interface
+    if st.session_state.documents and st.session_state.vector_store:
         st.header("💬 Chat with Your Documents")
+        st.write("Chat box below:")
         
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
@@ -616,53 +588,35 @@ def main():
                 try:
                     if hasattr(st.session_state.vector_store, 'as_retriever'):
                         retriever = st.session_state.vector_store.as_retriever()
-                        if hasattr(retriever, '_get_relevant_documents'):
-                            relevant_docs = retriever._get_relevant_documents(user_question)
-                        else:
-                            relevant_docs = retriever.get_relevant_documents(user_question)
+                        relevant_docs = retriever._get_relevant_documents(user_question)
                     else:
                         relevant_docs = st.session_state.documents
                     
                     context = "\n\n".join([doc.page_content for doc in relevant_docs[:3]])
                     
                     with st.spinner("Thinking..."):
-                        model_names = [
-                            'models/gemini-2.0-flash',
-                            'models/gemini-2.5-flash', 
-                            'models/gemini-flash-latest'
-                        ]
-                        
-                        answer = None
-                        last_error = None
-                        
-                        for model_name in model_names:
-                            try:
-                                model = genai.GenerativeModel(model_name)
-                                prompt = f"""Based on the following document content, please answer this question: {user_question}
+                        prompt = f"""Based on the following document content, please answer this question: {user_question}
 
 Document content:
 {context}
 
 Please provide a helpful and accurate answer based only on the information provided."""
-                                
-                                response = model.generate_content(prompt)
-                                answer = response.text
-                                break
-                            except Exception as model_error:
-                                last_error = model_error
-                                continue
+                        
+                        answer = query_cborg(
+                            prompt, 
+                            st.session_state.cborg_api_key,
+                            st.session_state.cborg_model
+                        )
                         
                         if answer:
                             st.write(answer)
                             
-                            # ENHANCED SOURCING with answer-aware extraction
                             with st.expander("📚 Sources", expanded=True):
                                 for idx, doc in enumerate(relevant_docs[:3], 1):
                                     st.subheader(f"Source {idx}: {doc.metadata.get('source', 'Unknown')}")
                                     
                                     content = doc.page_content
                                     
-                                    # Find excerpts using BOTH query AND answer
                                     excerpts = find_relevant_excerpts(
                                         content, 
                                         user_question, 
@@ -688,7 +642,6 @@ Please provide a helpful and accurate answer based only on the information provi
                                     
                                     st.caption(f"📄 Full document: {len(content):,} characters")
                                     
-                                    # Use expander for full document instead
                                     with st.expander(f"📖 View full document"):
                                         st.text_area(
                                             "Full document content",
@@ -698,7 +651,6 @@ Please provide a helpful and accurate answer based only on the information provi
                                             key=f"full_content_{idx}_{doc.metadata.get('file_id', 'unknown')}"
                                         )
                                     
-                                    # Add a divider between sources
                                     if idx < len(relevant_docs[:3]):
                                         st.divider()
                             
@@ -708,15 +660,12 @@ Please provide a helpful and accurate answer based only on the information provi
                 
                 except Exception as e:
                     st.error(f"⚠️ Error: {str(e)[:200]}")
-                    
                     st.info("📝 Showing relevant document content instead:")
+                    
                     try:
                         if hasattr(st.session_state.vector_store, 'as_retriever'):
                             retriever = st.session_state.vector_store.as_retriever()
-                            if hasattr(retriever, '_get_relevant_documents'):
-                                relevant_docs = retriever._get_relevant_documents(user_question)
-                            else:
-                                relevant_docs = st.session_state.documents
+                            relevant_docs = retriever._get_relevant_documents(user_question)
                         else:
                             relevant_docs = st.session_state.documents
                         
@@ -740,9 +689,11 @@ Please provide a helpful and accurate answer based only on the information provi
                                 st.text_area("Relevant content", best_snippet, height=100, key=f"snippet_{doc.metadata.get('file_id', 'unknown')}")
                             else:
                                 preview = doc.page_content[:300]
-                                st.text_area("Document preview", preview, height=100, key=f"preview_{doc.metadata.get('file_id', 'unknown')}")
+                                st.text_area("Document preview", preview, height=100, key=f"preview_err_{doc.metadata.get('file_id', 'unknown')}")
                     except Exception as fallback_error:
                         st.error(f"Fallback also failed: {fallback_error}")
+    else:
+        st.info("👆 Load documents above to start chatting")
 
 if __name__ == "__main__":
     main()
