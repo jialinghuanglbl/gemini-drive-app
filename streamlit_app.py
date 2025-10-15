@@ -366,7 +366,7 @@ def create_vector_store(documents: List[Document], cborg_api_key: str):
 
 def main():
     st.title("📚 Google Drive AI Chat - CBORG")
-    st.markdown("Chat with your Google Drive documents using LBNL's CBORG LLM")
+    st.markdown("Chat with your Google Drive documents using CBORG models")
     
     # Sidebar
     with st.sidebar:
@@ -537,7 +537,6 @@ def main():
                     st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
                     
                     st.success(f"✅ Loaded {len(documents)} documents successfully!")
-                    st.info("💬 Chat box should appear below!")
                 else:
                     st.error("No documents could be processed")
     
@@ -570,7 +569,6 @@ def main():
     # Chat interface
     if st.session_state.documents and st.session_state.vector_store:
         st.header("💬 Chat with Your Documents")
-        st.write("Chat box below:")
         
         for question, answer in st.session_state.chat_history:
             with st.chat_message("user"):
