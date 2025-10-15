@@ -557,15 +557,7 @@ def main():
                     disabled=True,
                     key=f"preview_{i}"
                 )
-    
-    # DEBUG INFO
-    st.divider()
-    st.write("🔍 DEBUG INFO:")
-    st.write(f"- Documents loaded: {len(st.session_state.documents)}")
-    st.write(f"- Vector store exists: {st.session_state.vector_store is not None}")
-    st.write(f"- Should show chat: {st.session_state.documents and st.session_state.vector_store}")
-    st.divider()
-    
+
     # Chat interface
     if st.session_state.documents and st.session_state.vector_store:
         st.header("💬 Chat with Your Documents")
@@ -691,7 +683,7 @@ Please provide a helpful and accurate answer based only on the information provi
                     except Exception as fallback_error:
                         st.error(f"Fallback also failed: {fallback_error}")
     else:
-        st.info("👆 Load documents above to start chatting")
+        return None
 
 if __name__ == "__main__":
     main()
