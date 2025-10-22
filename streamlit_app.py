@@ -291,6 +291,214 @@ def list_drive_files(service, folder_id: Optional[str] = None, search_term: Opti
         st.error(f"Error listing files: {e}")
         return []
 
+def list_folder_contents(service, folder_id: str = 'root'):
+    """List both folders and files in a given folder"""
+    try:
+        # Get folders
+        folder_query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        folder_results = service.files().list(
+            q=folder_query,
+            fields="files(id, name, mimeType)",
+            orderBy="name",
+            pageSize=100
+        ).execute()
+        folders = folder_results.get('files', [])
+        
+        # Get files
+        supported_types = [
+            'application/vnd.google-apps.document',
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.google-apps.spreadsheet',
+            'text/plain',
+            'application/msword',
+            'application/vnd.google-apps.shortcut'
+        ]
+        
+        file_query = f"'{folder_id}' in parents and trashed=false and (" + " or ".join([f"mimeType='{mime}'" for mime in supported_types]) + ")"
+        file_results = service.files().list(
+            q=file_query,
+            fields="files(id, name, mimeType, shortcutDetails)",
+            orderBy="name",
+            pageSize=100
+        ).execute()
+        files = file_results.get('files', [])
+        
+        return folders, files
+    except Exception as e:
+        st.error(f"Error listing contents: {e}")
+        return [], []
+
+def get_file_icon(mime_type: str) -> str:
+    """Return emoji icon based on file type"""
+    icon_map = {
+        'application/vnd.google-apps.folder': '📁',
+        'application/vnd.google-apps.document': '📄',
+        'application/vnd.google-apps.spreadsheet': '📊',
+        'application/pdf': '📕',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝',
+        'text/plain': '📃',
+        'application/msword': '📝',
+        'application/vnd.google-apps.shortcut': '🔗'
+    }
+    return icon_map.get(mime_type, '📄')
+
+def interactive_browser(service):
+    """Interactive file/folder browser with visual selection"""
+    
+    # Initialize browser state
+    if 'browser_path' not in st.session_state:
+        st.session_state.browser_path = []
+        st.session_state.browser_current_folder = 'root'
+        st.session_state.browser_current_name = 'My Drive'
+        st.session_state.selected_items = []
+    
+    st.subheader(f"📂 Current Location: {' > '.join([st.session_state.browser_current_name] if not st.session_state.browser_path else [st.session_state.browser_current_name] + st.session_state.browser_path)}")
+    
+    # Navigation buttons
+    col1, col2, col3 = st.columns([1, 1, 4])
+    with col1:
+        if st.button("⬆️ Go Up", disabled=st.session_state.browser_current_folder == 'root'):
+            if st.session_state.browser_path:
+                st.session_state.browser_path.pop()
+            # Note: Going up would require tracking parent IDs, simplified here
+            st.session_state.browser_current_folder = 'root'
+            st.session_state.browser_current_name = 'My Drive'
+            st.rerun()
+    
+    with col2:
+        if st.button("🏠 Home"):
+            st.session_state.browser_path = []
+            st.session_state.browser_current_folder = 'root'
+            st.session_state.browser_current_name = 'My Drive'
+            st.session_state.selected_items = []
+            st.rerun()
+    
+    # Get current folder contents
+    folders, files = list_folder_contents(service, st.session_state.browser_current_folder)
+    
+    st.write(f"**Folders:** {len(folders)} | **Files:** {len(files)}")
+    
+    # Display folders first
+    if folders:
+        st.markdown("### 📁 Folders")
+        
+        # Create grid layout for folders
+        cols_per_row = 3
+        for i in range(0, len(folders), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, folder in enumerate(folders[i:i+cols_per_row]):
+                with cols[j]:
+                    if st.button(
+                        f"📁\n{folder['name'][:30]}{'...' if len(folder['name']) > 30 else ''}",
+                        key=f"folder_{folder['id']}",
+                        use_container_width=True
+                    ):
+                        # Navigate into folder
+                        st.session_state.browser_path.append(folder['name'])
+                        st.session_state.browser_current_folder = folder['id']
+                        st.session_state.browser_current_name = folder['name']
+                        st.session_state.selected_items = []
+                        st.rerun()
+    
+    # Display files
+    if files:
+        st.markdown("### 📄 Files")
+        
+        # File selection
+        st.info("Select files to load (click to toggle selection):")
+        
+        cols_per_row = 3
+        for i in range(0, len(files), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, file in enumerate(files[i:i+cols_per_row]):
+                with cols[j]:
+                    icon = get_file_icon(file['mimeType'])
+                    file_id = file['id']
+                    is_selected = file_id in st.session_state.selected_items
+                    
+                    # Create button with visual selection indicator
+                    button_label = f"{'✅ ' if is_selected else ''}{icon}\n{file['name'][:30]}{'...' if len(file['name']) > 30 else ''}"
+                    
+                    if st.button(
+                        button_label,
+                        key=f"file_{file_id}",
+                        use_container_width=True,
+                        type="primary" if is_selected else "secondary"
+                    ):
+                        # Toggle selection
+                        if file_id in st.session_state.selected_items:
+                            st.session_state.selected_items.remove(file_id)
+                        else:
+                            st.session_state.selected_items.append(file_id)
+                        st.rerun()
+    
+    # Selection summary and load button
+    if st.session_state.selected_items:
+        st.success(f"✅ {len(st.session_state.selected_items)} file(s) selected")
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("🔄 Load Selected Files", use_container_width=True, type="primary"):
+                return st.session_state.selected_items
+        with col2:
+            if st.button("❌ Clear Selection", use_container_width=True):
+                st.session_state.selected_items = []
+                st.rerun()
+    else:
+        st.info("👆 Click on files above to select them for loading")
+    
+    return None
+
+# Add this to your main() function in the load_option section:
+
+# Replace the load_option segmented_control section with this:
+load_option = st.segmented_control(
+    "Choose loading method:",
+    options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders", "🗂️ Browse files"]
+)
+
+# Then add this elif block after the other options:
+elif load_option == "🗂️ Browse files":
+    st.info("Navigate through your Google Drive and select files to load")
+    
+    selected_file_ids = interactive_browser(service)
+    
+    if selected_file_ids:
+        with st.spinner("Loading selected files..."):
+            try:
+                files = []
+                for file_id in selected_file_ids:
+                    file_info = service.files().get(
+                        fileId=file_id,
+                        fields="id, name, mimeType, shortcutDetails"
+                    ).execute()
+                    files.append(file_info)
+                
+                if files:
+                    st.info(f"Processing {len(files)} selected files...")
+                    documents = []
+                    progress_bar = st.progress(0)
+                    
+                    for i, file_info in enumerate(files):
+                        doc = process_file(service, file_info)
+                        if doc:
+                            documents.append(doc)
+                        progress_bar.progress((i + 1) / len(files))
+                    
+                    if documents:
+                        st.session_state.documents = documents
+                        st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
+                        st.success(f"✅ Loaded {len(documents)} documents successfully!")
+                        # Clear selection after loading
+                        st.session_state.selected_items = []
+                        st.session_state.browser_path = []
+                        st.session_state.browser_current_folder = 'root'
+                    else:
+                        st.error("No documents could be processed")
+            except Exception as e:
+                st.error(f"Error loading files: {e}")
+
 def process_file(service, file_info: dict) -> Optional[Document]:
     """Process a single file and return Document"""
     file_id = file_info['id']
@@ -448,7 +656,7 @@ def main():
     
     load_option = st.segmented_control(
         "Choose loading method:",
-        options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders"]
+        options=["🔗 Paste URL", "📄 Search files", "🗂️ Browse files", "📁 Browse by folder", "🔍 Search folders"]
     )
     
     if load_option == "🔗 Paste URL":
@@ -487,7 +695,46 @@ def main():
         search_term = st.text_input("📄 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
-        
+
+    elif load_option == "🗂️ Browse files":
+    st.info("Navigate through your Google Drive and select files to load")
+    
+    selected_file_ids = interactive_browser(service)
+    
+    if selected_file_ids:
+        with st.spinner("Loading selected files..."):
+            try:
+                files = []
+                for file_id in selected_file_ids:
+                    file_info = service.files().get(
+                        fileId=file_id,
+                        fields="id, name, mimeType, shortcutDetails"
+                    ).execute()
+                    files.append(file_info)
+                
+                if files:
+                    st.info(f"Processing {len(files)} selected files...")
+                    documents = []
+                    progress_bar = st.progress(0)
+                    
+                    for i, file_info in enumerate(files):
+                        doc = process_file(service, file_info)
+                        if doc:
+                            documents.append(doc)
+                        progress_bar.progress((i + 1) / len(files))
+                    
+                    if documents:
+                        st.session_state.documents = documents
+                        st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
+                        st.success(f"✅ Loaded {len(documents)} documents successfully!")
+                        # Clear selection after loading
+                        st.session_state.selected_items = []
+                        st.session_state.browser_path = []
+                        st.session_state.browser_current_folder = 'root'
+                    else:
+                        st.error("No documents could be processed")
+            except Exception as e:
+                st.error(f"Error loading files: {e}")    
     elif load_option == "📁 Browse by folder":
         folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
