@@ -1,4 +1,3 @@
-import requests
 import streamlit as st
 import json
 from io import BytesIO
@@ -8,8 +7,9 @@ import requests
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-from langchain.schema import Document, BaseRetriever
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Page configuration
 st.set_page_config(
