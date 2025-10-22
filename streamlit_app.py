@@ -378,7 +378,7 @@ def get_file_icon(mime_type: str) -> str:
     }
     return icon_map.get(mime_type, '📄')
 
-def interactive_browser(service):
+def interactive_browser(service, mode: str = 'files'):
     """Interactive file/folder browser with visual selection"""
     
     # Initialize browser state
@@ -387,6 +387,8 @@ def interactive_browser(service):
         st.session_state.browser_current_folder = 'root'
         st.session_state.browser_current_name = 'My Drive'
         st.session_state.selected_items = []
+        st.session_state.selected_folder = None
+        st.session_state.open_folder_browser = False
     
     st.subheader(f"📂 Current Location: {' > '.join([st.session_state.browser_current_name] if not st.session_state.browser_path else [st.session_state.browser_current_name] + st.session_state.browser_path)}")
     
@@ -474,14 +476,24 @@ def interactive_browser(service):
         
         col1, col2 = st.columns([1, 1])
         with col1:
-            if st.button("🔄 Load Selected Files", use_container_width=True, type="primary"):
-                return st.session_state.selected_items
+            if mode == 'files':
+                if st.button("🔄 Load Selected Files", use_container_width=True, type="primary"):
+                    return st.session_state.selected_items
+            else:
+                if st.button("📁 Select this folder", use_container_width=True, type="primary"):
+                    # Set the selected folder in session state and exit
+                    st.session_state.selected_folder = st.session_state.browser_current_folder
+                    st.session_state.open_folder_browser = False
+                    st.rerun()
         with col2:
             if st.button("❌ Clear Selection", use_container_width=True):
                 st.session_state.selected_items = []
                 st.rerun()
     else:
-        st.info("👆 Click on files above to select them for loading")
+        if mode == 'files':
+            st.info("👆 Click on files above to select them for loading")
+        else:
+            st.info("Navigate to the folder you want and click 'Select this folder'.")
     
     return None
 
@@ -685,7 +697,26 @@ def main():
     
         
     elif load_option == "📁 Browse by folder":
-        folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
+        # Allow opening the interactive folder browser
+        if st.button("🗂️ Open folder browser", use_container_width=True):
+            st.session_state.open_folder_browser = True
+            st.session_state.browser_current_folder = 'root'
+            st.session_state.browser_path = []
+            st.session_state.browser_current_name = 'My Drive'
+            st.session_state.selected_items = []
+            st.rerun()
+
+        # If the folder browser is open, show it (mode folder)
+        if st.session_state.get('open_folder_browser'):
+            selected_folder = interactive_browser(service, mode='folder')
+            # If a folder was selected, set folder_id
+            if st.session_state.get('selected_folder'):
+                folder_id = st.session_state.selected_folder
+                st.info(f"Selected folder ID: `{folder_id}`")
+            else:
+                folder_id = None
+        else:
+            folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
         folder_search = None
         
