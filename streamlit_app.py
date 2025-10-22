@@ -697,44 +697,45 @@ def main():
         folder_search = None
 
     elif load_option == "🗂️ Browse files":
-    st.info("Navigate through your Google Drive and select files to load")
-    
-    selected_file_ids = interactive_browser(service)
-    
-    if selected_file_ids:
-        with st.spinner("Loading selected files..."):
-            try:
-                files = []
-                for file_id in selected_file_ids:
-                    file_info = service.files().get(
-                        fileId=file_id,
-                        fields="id, name, mimeType, shortcutDetails"
-                    ).execute()
-                    files.append(file_info)
-                
-                if files:
-                    st.info(f"Processing {len(files)} selected files...")
-                    documents = []
-                    progress_bar = st.progress(0)
+        st.info("Navigate through your Google Drive and select files to load")
+        
+        selected_file_ids = interactive_browser(service)
+        
+        if selected_file_ids:
+            with st.spinner("Loading selected files..."):
+                try:
+                    files = []
+                    for file_id in selected_file_ids:
+                        file_info = service.files().get(
+                            fileId=file_id,
+                            fields="id, name, mimeType, shortcutDetails"
+                        ).execute()
+                        files.append(file_info)
                     
-                    for i, file_info in enumerate(files):
-                        doc = process_file(service, file_info)
-                        if doc:
-                            documents.append(doc)
-                        progress_bar.progress((i + 1) / len(files))
+                    if files:
+                        st.info(f"Processing {len(files)} selected files...")
+                        documents = []
+                        progress_bar = st.progress(0)
+                        
+                        for i, file_info in enumerate(files):
+                            doc = process_file(service, file_info)
+                            if doc:
+                                documents.append(doc)
+                            progress_bar.progress((i + 1) / len(files))
+                        
+                        if documents:
+                            st.session_state.documents = documents
+                            st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
+                            st.success(f"✅ Loaded {len(documents)} documents successfully!")
+                            # Clear selection after loading
+                            st.session_state.selected_items = []
+                            st.session_state.browser_path = []
+                            st.session_state.browser_current_folder = 'root'
+                        else:
+                            st.error("No documents could be processed")
+                except Exception as e:
+                    st.error(f"Error loading files: {e}")    
                     
-                    if documents:
-                        st.session_state.documents = documents
-                        st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
-                        st.success(f"✅ Loaded {len(documents)} documents successfully!")
-                        # Clear selection after loading
-                        st.session_state.selected_items = []
-                        st.session_state.browser_path = []
-                        st.session_state.browser_current_folder = 'root'
-                    else:
-                        st.error("No documents could be processed")
-            except Exception as e:
-                st.error(f"Error loading files: {e}")    
     elif load_option == "📁 Browse by folder":
         folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
         search_term = None
