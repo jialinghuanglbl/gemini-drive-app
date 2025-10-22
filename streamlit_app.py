@@ -695,7 +695,36 @@ def main():
         search_term = st.text_input("📄 Search for files", placeholder="Enter keywords to find files...")
         folder_id = None
         folder_search = None
-
+    
+        
+    elif load_option == "📁 Browse by folder":
+        folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
+        search_term = None
+        folder_search = None
+        
+    else:  # Search folders
+        folder_search = st.text_input("🔍 Search for folders", placeholder="Enter folder name keywords...")
+        search_term = None
+        folder_id = None
+        
+        if folder_search and st.button("🔍 Find Folders", use_container_width=True):
+            folders = list_drive_folders(service, search_term=folder_search)
+            
+            if folders:
+                st.success(f"Found {len(folders)} matching folders:")
+                
+                folder_options = {f"{folder['name']}": folder['id'] for folder in folders}
+                selected_folder_name = st.selectbox(
+                    "Select a folder to load documents from:",
+                    options=list(folder_options.keys())
+                )
+                
+                if selected_folder_name:
+                    folder_id = folder_options[selected_folder_name]
+                    st.info(f"Selected folder ID: `{folder_id}`")
+            else:
+                st.warning("No folders found matching your search")
+    
     elif load_option == "🗂️ Browse files":
         st.info("Navigate through your Google Drive and select files to load")
         
@@ -734,36 +763,9 @@ def main():
                         else:
                             st.error("No documents could be processed")
                 except Exception as e:
-                    st.error(f"Error loading files: {e}")    
+                    st.error(f"Error loading files: {e}")
+                    st.stop()
                     
-    elif load_option == "📁 Browse by folder":
-        folder_id = st.text_input("📁 Folder ID", placeholder="Paste Google Drive folder ID")
-        search_term = None
-        folder_search = None
-        
-    else:  # Search folders
-        folder_search = st.text_input("🔍 Search for folders", placeholder="Enter folder name keywords...")
-        search_term = None
-        folder_id = None
-        
-        if folder_search and st.button("🔍 Find Folders", use_container_width=True):
-            folders = list_drive_folders(service, search_term=folder_search)
-            
-            if folders:
-                st.success(f"Found {len(folders)} matching folders:")
-                
-                folder_options = {f"{folder['name']}": folder['id'] for folder in folders}
-                selected_folder_name = st.selectbox(
-                    "Select a folder to load documents from:",
-                    options=list(folder_options.keys())
-                )
-                
-                if selected_folder_name:
-                    folder_id = folder_options[selected_folder_name]
-                    st.info(f"Selected folder ID: `{folder_id}`")
-            else:
-                st.warning("No folders found matching your search")
-    
     if st.button("🔄 Load Documents", use_container_width=True):
         with st.spinner("Loading documents from Google Drive..."):
             if hasattr(st.session_state, 'url_file_id') and st.session_state.url_file_id:
