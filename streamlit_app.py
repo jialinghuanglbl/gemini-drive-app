@@ -326,20 +326,15 @@ def list_drive_files(service, folder_id: Optional[str] = None, search_term: Opti
         st.error(f"Error listing files: {e}")
         return []
 
-def list_folder_contents(service, folder_id: str = 'root'):
-    """List both folders and files in a given folder"""
+def list_folder_contents(service, folder_id: str = 'root', include_shared_with_me: bool = False, include_all_drives: bool = False):
+    """List both folders and files in a given folder.
+
+    Options:
+    - include_shared_with_me: also include files shared with the service account
+    - include_all_drives: include files from shared drives (requires access)
+    """
     try:
-        # Get folders
-        folder_query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        folder_results = service.files().list(
-            q=folder_query,
-            fields="files(id, name, mimeType)",
-            orderBy="name",
-            pageSize=100
-        ).execute()
-        folders = folder_results.get('files', [])
-        
-        # Get files
+        # Common supported types
         supported_types = [
             'application/vnd.google-apps.document',
             'application/pdf',
@@ -349,16 +344,71 @@ def list_folder_contents(service, folder_id: str = 'root'):
             'application/msword',
             'application/vnd.google-apps.shortcut'
         ]
-        
+
+        # Get folders in the folder_id
+        folder_query = f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        folder_results = service.files().list(
+            q=folder_query,
+            fields="files(id, name, mimeType, owners, driveId)",
+            orderBy="name",
+            pageSize=200,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
+        folders = folder_results.get('files', [])
+
+        # Build file query for the current folder
         file_query = f"'{folder_id}' in parents and trashed=false and (" + " or ".join([f"mimeType='{mime}'" for mime in supported_types]) + ")"
         file_results = service.files().list(
             q=file_query,
-            fields="files(id, name, mimeType, shortcutDetails)",
+            fields="files(id, name, mimeType, owners, shortcutDetails, driveId)",
             orderBy="name",
-            pageSize=100
+            pageSize=200,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
         ).execute()
         files = file_results.get('files', [])
-        
+
+        # Optionally include files shared with me (not necessarily in the user's My Drive)
+        if include_shared_with_me:
+            shared_query = "sharedWithMe = true and trashed=false and (" + " or ".join([f"mimeType='{mime}'" for mime in supported_types]) + ")"
+            shared_results = service.files().list(
+                q=shared_query,
+                fields="files(id, name, mimeType, owners, shortcutDetails, driveId)",
+                orderBy="name",
+                pageSize=200,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
+            ).execute()
+            shared_files = shared_results.get('files', [])
+            # Merge shared_files that aren't already in files
+            existing_ids = {f['id'] for f in files}
+            for sf in shared_files:
+                if sf['id'] not in existing_ids:
+                    files.append(sf)
+
+        # Optionally include top-level items from shared drives (corpora=allDrives)
+        if include_all_drives and folder_id == 'root':
+            try:
+                drive_query = "trashed=false and (" + " or ".join([f"mimeType='{mime}'" for mime in supported_types]) + ")"
+                drive_results = service.files().list(
+                    q=drive_query,
+                    fields="files(id, name, mimeType, owners, driveId)",
+                    orderBy="name",
+                    pageSize=200,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    corpora='allDrives'
+                ).execute()
+                drive_files = drive_results.get('files', [])
+                existing_ids = {f['id'] for f in files}
+                for df in drive_files:
+                    if df['id'] not in existing_ids:
+                        files.append(df)
+            except Exception:
+                # ignore corpora errors for accounts without drive access
+                pass
+
         return folders, files
     except Exception as e:
         st.error(f"Error listing contents: {e}")
