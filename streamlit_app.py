@@ -9,7 +9,42 @@ from googleapiclient.discovery import build
 
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
+class RecursiveCharacterTextSplitter:
+    """Minimal replacement for langchain text splitter used in this app.
+
+    Provides split_documents(documents) -> List[Document], splitting page_content
+    into chunks with overlap.
+    """
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 100):
+        self.chunk_size = int(chunk_size)
+        self.chunk_overlap = int(chunk_overlap)
+
+    def split_text(self, text: str) -> List[str]:
+        if not text:
+            return []
+        chunks = []
+        step = self.chunk_size - self.chunk_overlap if self.chunk_size > self.chunk_overlap else self.chunk_size
+        for i in range(0, len(text), step):
+            chunk = text[i:i + self.chunk_size]
+            if chunk.strip():
+                chunks.append(chunk)
+        return chunks
+
+    def split_documents(self, documents: List[Document]) -> List[Document]:
+        out = []
+        for doc in documents:
+            chunks = self.split_text(doc.page_content)
+            for idx, chunk in enumerate(chunks):
+                meta = dict(doc.metadata) if getattr(doc, 'metadata', None) else {}
+                # annotate chunk index to metadata
+                meta.update({
+                    'chunk_index': idx,
+                    'source': meta.get('source', None)
+                })
+                out.append(Document(page_content=chunk, metadata=meta))
+        return out
 
 # Page configuration
 st.set_page_config(
@@ -450,55 +485,7 @@ def interactive_browser(service):
     
     return None
 
-# Add this to your main() function in the load_option section:
-
-# Replace the load_option segmented_control section with this:
-load_option = st.segmented_control(
-    "Choose loading method:",
-    options=["🔗 Paste URL", "📄 Search files", "📁 Browse by folder", "🔍 Search folders", "🗂️ Browse files"]
-)
-
-# Then add this elif block after the other options:
-elif load_option == "🗂️ Browse files":
-    st.info("Navigate through your Google Drive and select files to load")
-    
-    selected_file_ids = interactive_browser(service)
-    
-    if selected_file_ids:
-        with st.spinner("Loading selected files..."):
-            try:
-                files = []
-                for file_id in selected_file_ids:
-                    file_info = service.files().get(
-                        fileId=file_id,
-                        fields="id, name, mimeType, shortcutDetails"
-                    ).execute()
-                    files.append(file_info)
-                
-                if files:
-                    st.info(f"Processing {len(files)} selected files...")
-                    documents = []
-                    progress_bar = st.progress(0)
-                    
-                    for i, file_info in enumerate(files):
-                        doc = process_file(service, file_info)
-                        if doc:
-                            documents.append(doc)
-                        progress_bar.progress((i + 1) / len(files))
-                    
-                    if documents:
-                        st.session_state.documents = documents
-                        st.session_state.vector_store = create_vector_store(documents, cborg_api_key)
-                        st.success(f"✅ Loaded {len(documents)} documents successfully!")
-                        # Clear selection after loading
-                        st.session_state.selected_items = []
-                        st.session_state.browser_path = []
-                        st.session_state.browser_current_folder = 'root'
-                    else:
-                        st.error("No documents could be processed")
-            except Exception as e:
-                st.error(f"Error loading files: {e}")
-
+    # (Removed duplicate module-level load_option/elif block; main() contains the proper UI flow)
 def process_file(service, file_info: dict) -> Optional[Document]:
     """Process a single file and return Document"""
     file_id = file_info['id']
@@ -702,7 +689,7 @@ def main():
         search_term = None
         folder_search = None
         
-    else:  # Search folders
+    elif load_option == "🔍 Search folders":
         folder_search = st.text_input("🔍 Search for folders", placeholder="Enter folder name keywords...")
         search_term = None
         folder_id = None
@@ -764,8 +751,7 @@ def main():
                             st.error("No documents could be processed")
                 except Exception as e:
                     st.error(f"Error loading files: {e}")
-                    st.stop()
-                    
+
     if st.button("🔄 Load Documents", use_container_width=True):
         with st.spinner("Loading documents from Google Drive..."):
             if hasattr(st.session_state, 'url_file_id') and st.session_state.url_file_id:
