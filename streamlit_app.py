@@ -624,27 +624,46 @@ def format_spreadsheet_content(csv_content: str) -> str:
         df = pd.read_csv(StringIO(csv_content))
         
         # Clean up the data
-        df = df.fillna('')  # Replace NaN with empty string
+        df = df.fillna('')
         
-        # Create a formatted string representation
-        formatted = f"📊 Spreadsheet Data ({len(df)} rows × {len(df.columns)} columns)\n\n"
+        # Group columns by main category (non-empty headers)
+        column_groups = {}
+        current_category = None
         
-        # Add column headers with better formatting
-        formatted += "COLUMNS:\n"
-        for i, col in enumerate(df.columns, 1):
-            formatted += f"  {i}. {col}\n"
+        for col in df.columns:
+            if not col.startswith('Unnamed'):
+                current_category = col
+                column_groups[current_category] = [col]
+            elif current_category:
+                column_groups[current_category].append(col)
+        
+        formatted = f"📊 Spreadsheet Data ({len(df)} rows × {len([c for c in df.columns if not c.startswith('Unnamed')])} categories)\n\n"
+        
+        # Add category headers
+        formatted += "CATEGORIES:\n"
+        for i, category in enumerate(column_groups.keys(), 1):
+            formatted += f"  {i}. {category}\n"
         formatted += "\n"
         
-        # Format first 20 rows as a clean table
+        # Format first 20 rows with grouped data
         formatted += "DATA (showing first 20 rows):\n"
         formatted += "=" * 80 + "\n\n"
         
         for idx, row in df.head(20).iterrows():
             formatted += f"Row {idx + 1}:\n"
-            for col in df.columns:
-                value = str(row[col]).strip()
-                if value:  # Only show non-empty values
-                    formatted += f"  • {col}: {value}\n"
+            
+            for category, cols in column_groups.items():
+                # Collect all non-empty values under this category
+                values = []
+                for col in cols:
+                    value = str(row[col]).strip()
+                    if value:
+                        values.append(value)
+                
+                # Only show category if it has values
+                if values:
+                    formatted += f"  • {category}: {', '.join(values)}\n"
+            
             formatted += "\n"
         
         if len(df) > 20:
@@ -655,12 +674,13 @@ def format_spreadsheet_content(csv_content: str) -> str:
         if len(numeric_cols) > 0:
             formatted += "NUMERIC SUMMARIES:\n"
             for col in numeric_cols:
-                formatted += f"  {col}: min={df[col].min()}, max={df[col].max()}, mean={df[col].mean():.2f}\n"
+                if not col.startswith('Unnamed'):
+                    formatted += f"  {col}: min={df[col].min()}, max={df[col].max()}, mean={df[col].mean():.2f}\n"
         
         return formatted
         
     except Exception as e:
-        # Fallback to simple CSV if pandas processing fails
+        # Fallback to raw CSV if pandas processing fails
         return csv_content
 
 def create_vector_store(documents: List[Document], cborg_api_key: str):
