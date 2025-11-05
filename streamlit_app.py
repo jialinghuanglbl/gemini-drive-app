@@ -563,10 +563,10 @@ def process_file(service, file_info: dict) -> Optional[Document]:
             content = file_content.decode('utf-8')
             
         elif mime_type == 'application/vnd.google-apps.spreadsheet':
-    request = service.files().export_media(fileId=file_id, mimeType='text/csv')
-    file_content = request.execute()
-    content = file_content.decode('utf-8')
-    content = format_csv_content(content)  # ADD THIS LINE
+            request = service.files().export_media(fileId=file_id, mimeType='text/csv')
+            file_content = request.execute()
+            content = file_content.decode('utf-8')
+            content = format_csv_content(content) 
             
         elif mime_type == 'application/vnd.google-apps.shortcut':
             shortcut_details = file_info.get('shortcutDetails', {})
