@@ -120,7 +120,7 @@ def query_cborg(prompt: str, api_key: str, model: str = "llama-3.1-70b-instruct"
     import streamlit as st
     try:
         # st.info(f"CBORG API payload: {payload}")
-        response = requests.post(api_url, headers=headers, json=payload, timeout=60)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=120)
         # st.info(f"CBORG API response status: {response.status_code}")
         # if response.status_code != 200:
         #     st.error(f"CBORG API error {response.status_code}: {response.text}")
