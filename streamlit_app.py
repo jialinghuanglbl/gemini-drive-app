@@ -563,9 +563,10 @@ def process_file(service, file_info: dict) -> Optional[Document]:
             content = file_content.decode('utf-8')
             
         elif mime_type == 'application/vnd.google-apps.spreadsheet':
-            request = service.files().export_media(fileId=file_id, mimeType='text/csv')
-            file_content = request.execute()
-            content = file_content.decode('utf-8')
+    request = service.files().export_media(fileId=file_id, mimeType='text/csv')
+    file_content = request.execute()
+    content = file_content.decode('utf-8')
+    content = format_csv_content(content)  # ADD THIS LINE
             
         elif mime_type == 'application/vnd.google-apps.shortcut':
             shortcut_details = file_info.get('shortcutDetails', {})
@@ -612,6 +613,39 @@ def process_file(service, file_info: dict) -> Optional[Document]:
             )
     except Exception as e:
         return None
+
+def format_csv_content(csv_content: str) -> str:
+    """Format CSV content into a readable table format"""
+    import csv
+    from io import StringIO
+    
+    try:
+        reader = csv.reader(StringIO(csv_content))
+        rows = list(reader)
+        
+        if not rows:
+            return csv_content
+        
+        # Get headers
+        headers = rows[0]
+        data_rows = rows[1:]
+        
+        # Create markdown table
+        formatted = "| " + " | ".join(headers) + " |\n"
+        formatted += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+        
+        for row in data_rows[:50]:  # Limit to first 50 rows
+            # Pad row if needed
+            while len(row) < len(headers):
+                row.append("")
+            formatted += "| " + " | ".join(row[:len(headers)]) + " |\n"
+        
+        if len(data_rows) > 50:
+            formatted += f"\n... and {len(data_rows) - 50} more rows"
+        
+        return formatted
+    except:
+        return csv_content
 
 def create_vector_store(documents: List[Document], cborg_api_key: str):
     """Create simple text store"""
