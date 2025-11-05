@@ -566,7 +566,7 @@ def process_file(service, file_info: dict) -> Optional[Document]:
             request = service.files().export_media(fileId=file_id, mimeType='text/csv')
             file_content = request.execute()
             content = file_content.decode('utf-8')
-            content = format_csv_content(content) 
+            content = format_spreadsheet_content(content)
             
         elif mime_type == 'application/vnd.google-apps.shortcut':
             shortcut_details = file_info.get('shortcutDetails', {})
@@ -614,37 +614,53 @@ def process_file(service, file_info: dict) -> Optional[Document]:
     except Exception as e:
         return None
 
-def format_csv_content(csv_content: str) -> str:
-    """Format CSV content into a readable table format"""
-    import csv
-    from io import StringIO
-    
+def format_spreadsheet_content(csv_content: str) -> str:
+    """Format CSV content into a clean, readable spreadsheet-like format"""
     try:
-        reader = csv.reader(StringIO(csv_content))
-        rows = list(reader)
+        import pandas as pd
+        from io import StringIO
         
-        if not rows:
-            return csv_content
+        # Read CSV into pandas DataFrame
+        df = pd.read_csv(StringIO(csv_content))
         
-        # Get headers
-        headers = rows[0]
-        data_rows = rows[1:]
+        # Clean up the data
+        df = df.fillna('')  # Replace NaN with empty string
         
-        # Create markdown table
-        formatted = "| " + " | ".join(headers) + " |\n"
-        formatted += "| " + " | ".join(["---"] * len(headers)) + " |\n"
+        # Create a formatted string representation
+        formatted = f"📊 Spreadsheet Data ({len(df)} rows × {len(df.columns)} columns)\n\n"
         
-        for row in data_rows[:50]:  # Limit to first 50 rows
-            # Pad row if needed
-            while len(row) < len(headers):
-                row.append("")
-            formatted += "| " + " | ".join(row[:len(headers)]) + " |\n"
+        # Add column headers with better formatting
+        formatted += "COLUMNS:\n"
+        for i, col in enumerate(df.columns, 1):
+            formatted += f"  {i}. {col}\n"
+        formatted += "\n"
         
-        if len(data_rows) > 50:
-            formatted += f"\n... and {len(data_rows) - 50} more rows"
+        # Format first 20 rows as a clean table
+        formatted += "DATA (showing first 20 rows):\n"
+        formatted += "=" * 80 + "\n\n"
+        
+        for idx, row in df.head(20).iterrows():
+            formatted += f"Row {idx + 1}:\n"
+            for col in df.columns:
+                value = str(row[col]).strip()
+                if value:  # Only show non-empty values
+                    formatted += f"  • {col}: {value}\n"
+            formatted += "\n"
+        
+        if len(df) > 20:
+            formatted += f"... and {len(df) - 20} more rows\n\n"
+        
+        # Add summary statistics for numeric columns
+        numeric_cols = df.select_dtypes(include=['number']).columns
+        if len(numeric_cols) > 0:
+            formatted += "NUMERIC SUMMARIES:\n"
+            for col in numeric_cols:
+                formatted += f"  {col}: min={df[col].min()}, max={df[col].max()}, mean={df[col].mean():.2f}\n"
         
         return formatted
-    except:
+        
+    except Exception as e:
+        # Fallback to simple CSV if pandas processing fails
         return csv_content
 
 def create_vector_store(documents: List[Document], cborg_api_key: str):
