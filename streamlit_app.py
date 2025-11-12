@@ -758,7 +758,7 @@ def main():
             st.success("✅ Service account configured")
             service_email = st.secrets["gcp_service_account"].get("client_email", "")
             if service_email:
-                st.caption(f"Email:{service_email}")
+                st.caption(f"Email: {service_email}")
                 st.info(f"""
                 **Important:** Share your Google Drive folders/files with:
                 
