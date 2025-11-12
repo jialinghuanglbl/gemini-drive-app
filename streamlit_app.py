@@ -709,7 +709,7 @@ def main():
         except Exception as e:
             st.warning(f"Could not fetch CBORG models: {e}")
             return []
-    st.title("📚 Google Drive AI Chat - CBORG")
+    st.title("Google Drive AI Chat - CBORG")
     st.markdown("Chat with your Google Drive documents using CBORG models")
     
     # Sidebar
@@ -758,7 +758,7 @@ def main():
             st.success("✅ Service account configured")
             service_email = st.secrets["gcp_service_account"].get("client_email", "")
             if service_email:
-                st.caption(f"📧 {service_email}")
+                st.caption(f"Email:{service_email}")
                 st.info(f"""
                 **Important:** Share your Google Drive folders/files with:
                 
@@ -771,7 +771,7 @@ def main():
         st.stop()
     
     # Document loading interface
-    st.header("📂 Load Documents")
+    st.header("Load Documents")
     
     load_option = st.segmented_control(
         "Choose loading method:",
@@ -903,7 +903,7 @@ def main():
                 except Exception as e:
                     st.error(f"Error loading files: {e}")
 
-    if st.button("🔄 Load Documents", use_container_width=True):
+    if st.button("Load Documents", use_container_width=True):
         with st.spinner("Loading documents from Google Drive..."):
             if hasattr(st.session_state, 'url_file_id') and st.session_state.url_file_id:
                 try:
